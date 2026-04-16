@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: ironside-pl-dashboard
+    env: node
+    buildCommand: npm install
+    startCommand: node server.js
+    envVars:
+      - key: DASHBOARD_PASSWORD
+        sync: false
+      - key: CLICKUP_API_KEY
+        sync: false
+      - key: CLICKUP_LIST_ID
+        value: 901113608834
+    disk:
+      name: data
+      mountPath: /app/data
+      sizeGB: 1

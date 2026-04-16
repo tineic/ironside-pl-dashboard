@@ -1,0 +1,1313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Ironside P&L Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Barlow+Condensed:wght@600;700&display=swap" rel="stylesheet"/>
+<style>
+/* ── RESET & BASE ── */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0d0f14;
+  --surface:#151820;
+  --surface2:#1c2030;
+  --border:rgba(255,255,255,0.07);
+  --border2:rgba(255,255,255,0.12);
+  --text:#e8eaf0;
+  --text2:#9ca3af;
+  --text3:#6b7280;
+  --red:#dc2626;--red-l:rgba(220,38,38,0.12);--red-b:rgba(220,38,38,0.3);
+  --green:#16a34a;--green-l:rgba(22,163,74,0.12);--green-b:rgba(22,163,74,0.3);
+  --amber:#d97706;--amber-l:rgba(217,119,6,0.12);
+  --blue:#3b82f6;--blue-l:rgba(59,130,246,0.12);--blue-b:rgba(59,130,246,0.3);
+  --purple:#8b5cf6;--purple-l:rgba(139,92,246,0.12);
+  --sidebar-w:220px;
+  --font:'Barlow',sans-serif;
+  --font-cond:'Barlow Condensed',sans-serif;
+}
+body{
+  font-family:var(--font);
+  background:var(--bg);
+  color:var(--text);
+  font-size:13px;
+  line-height:1.5;
+  -webkit-font-smoothing:antialiased;
+  display:flex;
+  min-height:100vh;
+}
+
+/* ── SIDEBAR ── */
+.sidebar{
+  width:var(--sidebar-w);
+  background:var(--surface);
+  border-right:1px solid var(--border);
+  display:flex;flex-direction:column;
+  position:fixed;top:0;left:0;bottom:0;
+  z-index:100;
+}
+.sidebar-brand{
+  padding:20px 18px 16px;
+  display:flex;align-items:center;gap:10px;
+  border-bottom:1px solid var(--border);
+}
+.sidebar-brand img{
+  width:28px;height:28px;
+  filter:invert(1);opacity:0.85;
+}
+.sidebar-brand span{
+  font-family:var(--font-cond);
+  font-size:17px;font-weight:700;
+  letter-spacing:.1em;text-transform:uppercase;
+  color:#fff;
+}
+.sidebar-brand .sub{
+  font-size:9px;font-weight:600;
+  letter-spacing:.12em;text-transform:uppercase;
+  color:var(--text3);margin-top:1px;
+  display:block;
+}
+.nav{flex:1;padding:12px 0;overflow-y:auto;}
+.nav-item{
+  display:flex;align-items:center;gap:10px;
+  padding:9px 18px;
+  font-size:12px;font-weight:600;
+  letter-spacing:.04em;
+  color:var(--text3);
+  cursor:pointer;
+  border-left:2px solid transparent;
+  transition:all .15s;
+  user-select:none;
+}
+.nav-item:hover{color:var(--text);background:rgba(255,255,255,0.03);}
+.nav-item.active{
+  color:#fff;
+  border-left-color:var(--red);
+  background:rgba(220,38,38,0.08);
+}
+.nav-item .icon{font-size:14px;width:18px;text-align:center;flex-shrink:0;}
+.nav-badge{
+  margin-left:auto;
+  background:var(--red);color:#fff;
+  font-size:9px;font-weight:700;
+  padding:2px 6px;border-radius:10px;
+}
+.sidebar-footer{
+  padding:14px 18px;
+  border-top:1px solid var(--border);
+  font-size:10px;color:var(--text3);
+}
+.sidebar-footer .upload-btn{
+  display:block;width:100%;
+  padding:7px 10px;margin-bottom:6px;
+  background:rgba(255,255,255,0.05);
+  border:1px solid var(--border2);
+  border-radius:7px;
+  color:var(--text2);
+  font-family:var(--font);font-size:10px;font-weight:600;
+  letter-spacing:.05em;text-transform:uppercase;
+  cursor:pointer;text-align:center;
+  transition:all .15s;
+}
+.sidebar-footer .upload-btn:hover{background:rgba(255,255,255,0.08);color:var(--text);}
+.sidebar-footer .ds-label{
+  font-size:9px;color:var(--text3);
+  margin-bottom:3px;
+}
+.sidebar-footer .ds-val{
+  font-size:10px;color:var(--text2);
+  margin-bottom:8px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+
+/* ── MAIN CONTENT ── */
+.main{
+  margin-left:var(--sidebar-w);
+  flex:1;
+  min-height:100vh;
+  display:flex;flex-direction:column;
+}
+.topbar{
+  height:52px;
+  background:var(--surface);
+  border-bottom:1px solid var(--border);
+  display:flex;align-items:center;
+  padding:0 28px;
+  gap:16px;
+  position:sticky;top:0;z-index:50;
+}
+.topbar h1{
+  font-family:var(--font-cond);
+  font-size:16px;font-weight:700;
+  letter-spacing:.08em;text-transform:uppercase;
+  color:#fff;flex:1;
+}
+.topbar .scenario-info{
+  font-size:11px;color:var(--text3);
+  display:flex;align-items:center;gap:6px;
+}
+.topbar .scenario-badge{
+  padding:3px 9px;border-radius:12px;
+  font-size:10px;font-weight:700;
+  background:var(--blue-l);color:var(--blue);
+  border:1px solid var(--blue-b);
+}
+.content{padding:28px;flex:1;}
+
+/* ── CARDS ── */
+.card{
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:12px;
+  padding:20px 22px;
+  margin-bottom:16px;
+}
+.card-title{
+  font-size:10px;font-weight:700;
+  text-transform:uppercase;letter-spacing:.1em;
+  color:var(--text3);
+  margin-bottom:14px;
+}
+
+/* ── KPI GRID ── */
+.kpi-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(160px,1fr));
+  gap:12px;margin-bottom:16px;
+}
+.kpi{
+  background:var(--surface2);
+  border:1px solid var(--border);
+  border-radius:10px;
+  padding:14px 16px;
+}
+.kpi-label{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--text3);margin-bottom:6px;}
+.kpi-val{font-size:24px;font-weight:700;color:#fff;line-height:1;letter-spacing:-.02em;}
+.kpi-sub{font-size:10px;color:var(--text3);margin-top:4px;}
+.kpi-delta{font-size:11px;font-weight:600;margin-top:4px;}
+.kpi-delta.pos{color:var(--green);}
+.kpi-delta.neg{color:var(--red);}
+
+/* ── TABLES ── */
+.tbl{width:100%;border-collapse:collapse;font-size:12px;}
+.tbl th{
+  padding:8px 12px;
+  font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;
+  color:var(--text3);
+  border-bottom:1px solid var(--border2);
+  text-align:right;white-space:nowrap;
+}
+.tbl th:first-child{text-align:left;}
+.tbl td{
+  padding:7px 12px;
+  border-bottom:1px solid var(--border);
+  text-align:right;
+  color:var(--text2);
+}
+.tbl td:first-child{text-align:left;color:var(--text);font-weight:500;}
+.tbl tr:hover td{background:rgba(255,255,255,0.02);}
+.tbl tr.actual td{color:var(--text);}
+.tbl tr.section-header td{
+  background:rgba(255,255,255,0.03);
+  font-weight:700;color:var(--text);
+  font-size:10px;text-transform:uppercase;letter-spacing:.06em;
+  cursor:pointer;
+}
+.tbl tr.sub-row td{padding-left:28px;font-size:11px;color:var(--text3);}
+.tbl tr.total-row td{
+  border-top:1px solid var(--border2);
+  font-weight:700;color:var(--text);
+}
+.pos{color:var(--green)!important;}
+.neg{color:var(--red)!important;}
+.neutral{color:var(--text3)!important;}
+
+/* ── SCENARIO CONTROLS ── */
+.scenario-bar{
+  background:var(--surface2);
+  border:1px solid var(--border);
+  border-radius:10px;
+  padding:14px 18px;
+  margin-bottom:16px;
+  display:flex;align-items:center;gap:16px;flex-wrap:wrap;
+}
+.scenario-bar label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text3);}
+.preset-btn{
+  padding:5px 11px;
+  background:rgba(255,255,255,0.05);
+  border:1px solid var(--border2);
+  border-radius:6px;
+  color:var(--text2);
+  font-family:var(--font);font-size:11px;font-weight:600;
+  cursor:pointer;transition:all .15s;
+}
+.preset-btn:hover,.preset-btn.active{background:var(--blue-l);color:var(--blue);border-color:var(--blue-b);}
+.preset-btn.neg-btn.active{background:var(--red-l);color:var(--red);border-color:var(--red-b);}
+input[type=range]{accent-color:var(--blue);cursor:pointer;}
+
+/* ── BAR CHART ── */
+.bar-chart{display:flex;align-items:flex-end;gap:6px;height:160px;margin-top:8px;}
+.bar-wrap{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;}
+.bar-inner{width:100%;border-radius:4px 4px 0 0;transition:height .4s cubic-bezier(.4,0,.2,1);min-height:2px;}
+.bar-lbl{font-size:9px;color:var(--text3);font-weight:600;}
+.bar-amt{font-size:9px;color:var(--text2);white-space:nowrap;}
+
+/* ── CATEGORY CARDS ── */
+.cat-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;}
+.cat-card{
+  background:var(--surface2);border:1px solid var(--border);border-radius:10px;
+  overflow:hidden;
+}
+.cat-card-header{
+  padding:12px 16px;
+  display:flex;justify-content:space-between;align-items:center;
+  cursor:pointer;
+}
+.cat-card-header:hover{background:rgba(255,255,255,0.02);}
+.cat-card-name{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text2);}
+.cat-card-val{font-size:16px;font-weight:700;color:#fff;}
+.cat-card-body{padding:0 16px 12px;display:none;}
+.cat-card-body.open{display:block;}
+.cat-row{display:flex;justify-content:space-between;padding:4px 0;font-size:11px;border-bottom:1px solid var(--border);}
+.cat-row:last-child{border-bottom:none;}
+
+/* ── BUTTONS ── */
+.btn{
+  padding:8px 16px;border-radius:8px;font-family:var(--font);
+  font-size:12px;font-weight:600;cursor:pointer;transition:all .15s;
+  display:inline-flex;align-items:center;gap:6px;
+}
+.btn-primary{background:var(--red);color:#fff;border:none;}
+.btn-primary:hover{background:#b91c1c;}
+.btn-ghost{background:rgba(255,255,255,0.05);color:var(--text2);border:1px solid var(--border2);}
+.btn-ghost:hover{background:rgba(255,255,255,0.08);color:var(--text);}
+.btn-blue{background:var(--blue);color:#fff;border:none;}
+.btn-blue:hover{background:#2563eb;}
+.btn-sm{padding:5px 10px;font-size:11px;}
+
+/* ── LABOR MODEL ── */
+.dept-row{
+  display:grid;
+  grid-template-columns:130px 80px 80px 90px 90px 100px 80px;
+  gap:0;
+  border-bottom:1px solid var(--border);
+  align-items:center;
+}
+.dept-row.header{background:var(--surface2);}
+.dept-row.header div{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text3);padding:8px 10px;}
+.dept-row div{padding:8px 10px;font-size:12px;color:var(--text2);}
+.dept-row div:first-child{color:var(--text);font-weight:500;}
+.dept-row input[type=number]{
+  width:60px;padding:4px 6px;
+  background:rgba(255,255,255,0.06);
+  border:1px solid var(--border2);border-radius:5px;
+  color:#fff;font-family:var(--font);font-size:12px;
+  text-align:center;outline:none;
+}
+.surplus{color:var(--amber);}
+.deficit{color:var(--red);}
+.ontarget{color:var(--green);}
+
+/* ── STAFFING CHANGES ── */
+.change-item{
+  background:var(--surface2);border:1px solid var(--border);border-radius:8px;
+  padding:12px 14px;margin-bottom:8px;
+  display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+}
+.change-type{
+  padding:3px 8px;border-radius:5px;
+  font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;
+}
+.change-type.layoff{background:var(--red-l);color:var(--red);}
+.change-type.hours{background:var(--amber-l);color:var(--amber);}
+.change-name{font-weight:600;color:#fff;font-size:13px;}
+.change-detail{font-size:11px;color:var(--text3);flex:1;}
+.change-savings{font-weight:700;color:var(--green);}
+.change-status{
+  font-size:10px;font-weight:700;text-transform:uppercase;
+  padding:3px 8px;border-radius:5px;
+}
+.change-status.draft{background:rgba(255,255,255,0.06);color:var(--text3);}
+.change-status.sent{background:var(--blue-l);color:var(--blue);}
+.change-status.done{background:var(--green-l);color:var(--green);}
+
+/* ── ACTION ITEMS ── */
+.action-item{
+  background:var(--surface2);border:1px solid var(--border);border-radius:8px;
+  padding:12px 14px;margin-bottom:8px;
+  display:flex;align-items:flex-start;gap:12px;
+}
+.action-sev{width:4px;border-radius:2px;align-self:stretch;flex-shrink:0;}
+.action-sev.warn{background:var(--amber);}
+.action-sev.crit{background:var(--red);}
+.action-sev.info{background:var(--blue);}
+.action-body{flex:1;}
+.action-title{font-weight:600;color:var(--text);font-size:12px;margin-bottom:2px;}
+.action-detail{font-size:11px;color:var(--text3);}
+.action-meta{font-size:10px;color:var(--text3);margin-top:4px;}
+
+/* ── FORMS ── */
+.form-row{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px;}
+.form-group{display:flex;flex-direction:column;gap:4px;}
+.form-group label{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--text3);}
+.form-group input,.form-group select{
+  padding:7px 10px;
+  background:rgba(255,255,255,0.06);
+  border:1px solid var(--border2);border-radius:7px;
+  color:#fff;font-family:var(--font);font-size:12px;
+  outline:none;transition:border-color .15s;
+}
+.form-group input:focus,.form-group select:focus{border-color:var(--blue);}
+.form-group select option{background:#1c2030;color:#fff;}
+
+/* ── DIVIDER ── */
+.divider{height:1px;background:var(--border);margin:20px 0;}
+
+/* ── COMPARISON TABLE ── */
+.cmp-grid{
+  display:grid;
+  grid-template-columns:100px repeat(9,1fr);
+  font-size:11px;
+}
+.cmp-cell{padding:7px 8px;border-bottom:1px solid var(--border);}
+.cmp-header{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text3);padding:8px 8px;background:var(--surface2);}
+
+/* ── SCROLLBAR ── */
+::-webkit-scrollbar{width:6px;height:6px;}
+::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.1);border-radius:3px;}
+
+/* ── UTILS ── */
+.flex{display:flex;} .items-center{align-items:center;} .gap-8{gap:8px;} .gap-12{gap:12px;}
+.justify-between{justify-content:space-between;}
+.mt-4{margin-top:4px;} .mt-8{margin-top:8px;} .mt-12{margin-top:12px;} .mt-16{margin-top:16px;}
+.mb-8{margin-bottom:8px;} .mb-12{margin-bottom:12px;}
+.text-sm{font-size:11px;} .text-xs{font-size:10px;}
+.text-muted{color:var(--text3);}
+.font-bold{font-weight:700;} .font-600{font-weight:600;}
+.hidden{display:none!important;}
+.mono{font-variant-numeric:tabular-nums;}
+</style>
+</head>
+<body>
+
+<!-- SIDEBAR -->
+<nav class="sidebar">
+  <div class="sidebar-brand">
+    <img src="/logo.png" alt="Ironside"/>
+    <div>
+      <span>Ironside</span>
+      <span class="sub">P&amp;L Dashboard</span>
+    </div>
+  </div>
+  <div class="nav" id="nav">
+    <div class="nav-item active" data-page="overview"><span class="icon">◉</span>Overview</div>
+    <div class="nav-item" data-page="pl"><span class="icon">≡</span>Full P&amp;L</div>
+    <div class="nav-item" data-page="categories"><span class="icon">◫</span>Categories</div>
+    <div class="nav-item" data-page="labor"><span class="icon">⚙</span>Labor Model</div>
+    <div class="nav-item" data-page="scenario"><span class="icon">⬡</span>Scenario Model</div>
+    <div class="nav-item" data-page="actions"><span class="icon">◎</span>Action Items <span class="nav-badge hidden" id="navBadge">0</span></div>
+  </div>
+  <div class="sidebar-footer">
+    <button class="upload-btn" onclick="triggerUpload('actuals')">↑ Upload Actuals</button>
+    <button class="upload-btn" onclick="triggerUpload('projection')">↑ Upload Projection</button>
+    <input type="file" id="uploadInput" accept=".csv" style="display:none"/>
+    <div class="ds-label">Last actuals</div>
+    <div class="ds-val" id="dsActuals">Jan–Mar 2026</div>
+    <div class="ds-label">Last projection</div>
+    <div class="ds-val" id="dsProjection">2026 Full Year</div>
+  </div>
+</nav>
+
+<!-- MAIN -->
+<div class="main">
+  <div class="topbar">
+    <h1 id="pageTitle">Overview</h1>
+    <div class="scenario-info">
+      <span id="scenarioLabel" class="scenario-badge">Base Scenario</span>
+      <span id="lastSaved" class="text-xs text-muted"></span>
+    </div>
+  </div>
+  <div class="content" id="content"></div>
+</div>
+
+<script>
+'use strict';
+// ── EMBEDDED DATA ─────────────────────────────────────────────────────────────
+var PDATA = {"proj_ns":[841762.0,712422.0,825855.35,825855.35,850185.65,738011.82,651602.7,815131.86,799477.45,843866.85,1230190.9,1152634.85],"proj_cogs":[559738.0,492963.0,578098.75,578098.75,595129.96,516608.27,456121.89,570592.3,559634.22,590706.8,861133.63,806844.4],"proj_oc":[281290.09,194891.51,218414.34,188194.1,232459.03,176787.75,179344.91,172352.15,180880.53,178291.01,209452.36,277599.27],"proj_ni":[733.91,24567.49,29342.26,59562.5,22596.66,44615.8,16135.9,72187.41,58962.71,74869.05,159604.91,68191.19],"lr118":[126152.36,127967.89,122540.21,111547.42,105690.96,105690.96,105690.96,105690.96,105690.96,105690.96,122869.94,194269.07],"lr119":[6833.36,2259.04,13220.0,2220.0,5000.0,2220.0,4220.0,2220.0,5000.0,2220.0,5560.0,5340.0],"lr120":[4349.89,4990.0,2650.0,1500.0,7000.0,0,0,0,0,0,0,0],"lr121":[0,0,0,0,40000.0,0,0,0,0,0,0,0],"fixed":{"comp_exp":[13500.3,2414.24,-1956.33,43.67,2543.67,543.67,543.67,543.67,2543.67,543.67,-956.33,-956.33],"rewards":[0,-12485.79,-3175.87,-1500.0,-1500.0,-1500.0,-1500.0,-6500.0,-1500.0,-1500.0,-1500.0,-1500.0],"building":[27358.19,3000.07,26402.29,25372.06,25203.14,25203.14,25372.06,25203.14,25203.14,25372.06,25203.14,25203.14],"software":[6860.08,12016.43,7130.04,6768.37,5249.36,5197.77,10454.73,5897.77,5147.77,5747.77,5197.77,5147.77],"personal":[333.2,312.53,312.53,312.53,312.53,312.53,312.53,312.53,312.53,312.53,312.53,312.53],"misc":[2052.12,-1215.45,1500.0,1500.0,1500.0,1500.0,1500.0,1500.0,1500.0,1500.0,1500.0,1500.0],"base_mkt":[60530.44,36980.4,30941.47,17201.05,17298.37,16849.68,13900.96,14555.08,14492.46,14670.02,16215.31,15905.09],"base_pp":[33320.15,18652.15,18850.0,23229.0,24161.0,20770.0,18850.0,22929.0,22490.0,23734.0,35050.0,32378.0]},"actuals":{"ns":[845745.0,724668.0,622632.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0],"cogs":[562336.0,503213.0,437660.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0],"oc":[280620.66,197168.15,243831.05,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0],"ni":[2788.34,24286.85,-58859.05,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0],"labor":[136812.82,135216.93,141926.19,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0],"pp":[33320.15,18652.15,19147.68,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0],"mkt":[60530.44,39235.97,55747.71,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0],"comp":[13500.3,2414.24,-2414.6,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0],"rew":[0.0,-12485.79,-8941.82,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0],"bldg":[27358.19,3000.07,27519.82,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0],"sw":[6788.44,12016.43,7747.09,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0],"pers":[333.2,312.53,428.89,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0],"misc":[1977.12,-1194.38,2670.09,null,null,null,null,null,null,null,null,null]},"act_thru":2,"dec_2025_ns":1152634.85,"units_2025":[306,325,330,346,308,278,235,313,295,316,488,443]};
+
+// ── CONSTANTS ─────────────────────────────────────────────────────────────────
+var MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+var PROJ_MONTHS = MONTHS.slice(3); // Apr-Dec
+var MULTIPLIER = 47000 / (266.43 * (38*52/12)); // 1.0713
+var MKT_PCT = 0.033;
+var PP_PCT  = 0.026;
+var COGS_PCT = 0.70;
+var CAPACITY = {Building:5.5, Detailing:10, Inventory:40, Testing:45, Shipping:25, CS:12};
+var DEPT_ORDER = ['Building','Detailing','CS','Inventory','Shipping','Testing','Testing/RMA'];
+var DEPT_COLORS = {
+  Building:'#8b5cf6', Detailing:'#f59e0b', CS:'#3b82f6',
+  Inventory:'#10b981', Shipping:'#ec4899', Testing:'#06b6d4', 'Testing/RMA':'#0e7490'
+};
+
+// ── STATE ─────────────────────────────────────────────────────────────────────
+var STATE = {
+  page: 'overview',
+  scenarioPct: [0,0,0,0,0,0,0,0,0],
+  staffingChanges: [],
+  actionItems: [],
+  dismissedAlerts: {},
+  roster: [],
+  floorModel: { dailyUnits:20, daysPerMonth:22, builderMinutes:90, detailingPct:60 },
+  catOpen: {},
+  laborOpen: {}  // which staffing change panels are expanded
+};
+
+// ── SERVER SYNC ───────────────────────────────────────────────────────────────
+var saveTimer = null;
+function scheduleSave(){
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(saveState, 1000);
+}
+async function saveState(){
+  try{
+    await fetch('/api/state',{
+      method:'PATCH',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        scenarioPct: STATE.scenarioPct,
+        staffingChanges: STATE.staffingChanges,
+        actionItems: STATE.actionItems,
+        dismissedAlerts: STATE.dismissedAlerts,
+        roster: STATE.roster,
+        floorModel: STATE.floorModel
+      })
+    });
+    var el = document.getElementById('lastSaved');
+    if(el) el.textContent = 'Saved ' + new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+  }catch(e){ console.error('Save failed:', e); }
+}
+async function loadState(){
+  try{
+    var r = await fetch('/api/state');
+    var s = await r.json();
+    if(s.scenarioPct) STATE.scenarioPct = s.scenarioPct;
+    if(s.staffingChanges) STATE.staffingChanges = s.staffingChanges;
+    if(s.actionItems) STATE.actionItems = s.actionItems;
+    if(s.dismissedAlerts) STATE.dismissedAlerts = s.dismissedAlerts;
+    if(s.roster && s.roster.length) STATE.roster = s.roster;
+    if(s.floorModel) STATE.floorModel = s.floorModel;
+  }catch(e){ console.error('Load failed:', e); }
+}
+
+// ── MATH HELPERS ─────────────────────────────────────────────────────────────
+function isActual(i){ return i <= PDATA.act_thru; }
+function getFactor(i){ return i>=3 ? (1 + (STATE.scenarioPct[i-3]||0)/100) : 1; }
+
+function getNS(i){
+  if(isActual(i)) return PDATA.actuals.ns[i]||0;
+  return (PDATA.proj_ns[i]||0) * getFactor(i);
+}
+function getCOGS(i){
+  if(isActual(i)) return PDATA.actuals.cogs[i]||0;
+  return getNS(i) * COGS_PCT;
+}
+function getGP(i){ return getNS(i) - getCOGS(i); }
+
+// Labor — always projection sheet + staffing change deltas
+function getLaborBase(i){
+  return (PDATA.lr118[i]||0) + (PDATA.lr119[i]||0) + (PDATA.lr120[i]||0) + (PDATA.lr121[i]||0);
+}
+function getLaborDelta(i){
+  var delta = 0;
+  STATE.staffingChanges.forEach(function(ch){
+    if(ch.status === 'removed') return;
+    var start = ch.startMonth; // 0-indexed month
+    var end   = ch.type === 'layoff' ? 11 : ch.endMonth;
+    if(i >= start && i <= end) delta += ch.monthlyDelta;
+  });
+  return delta;
+}
+function getLabor(i){
+  if(isActual(i)) return PDATA.actuals.labor ? (PDATA.actuals.labor[i]||0) : getLaborBase(i);
+  return getLaborBase(i) + getLaborDelta(i);
+}
+
+function getPP(i){
+  if(isActual(i)) return PDATA.actuals.pp ? (PDATA.actuals.pp[i]||0) : 0;
+  var priorNS = i===0 ? PDATA.dec_2025_ns : getNS(i-1);
+  return priorNS * PP_PCT;
+}
+function getMkt(i){
+  if(isActual(i)) return PDATA.actuals.mkt ? (PDATA.actuals.mkt[i]||0) : 0;
+  return getNS(i) * MKT_PCT;
+}
+function getFixed(cat, i){
+  if(isActual(i)){
+    var map = {comp:PDATA.actuals.comp, rew:PDATA.actuals.rew, bldg:PDATA.actuals.bldg, sw:PDATA.actuals.sw, pers:PDATA.actuals.pers, misc:PDATA.actuals.misc};
+    return map[cat] ? (map[cat][i]||0) : 0;
+  }
+  var map2 = {comp:PDATA.fixed.comp_exp, rew:PDATA.fixed.rewards, bldg:PDATA.fixed.building, sw:PDATA.fixed.software, pers:PDATA.fixed.personal, misc:PDATA.fixed.misc};
+  return map2[cat] ? (map2[cat][i]||0) : 0;
+}
+function getOC(i){
+  return getLabor(i) + getPP(i) + getMkt(i) +
+    getFixed('comp',i) + getFixed('rew',i) + getFixed('bldg',i) +
+    getFixed('sw',i) + getFixed('pers',i) + getFixed('misc',i);
+}
+function getNI(i){ return getGP(i) - getOC(i); }
+
+// Floor model labor cost
+function getFloorLaborCost(){
+  var fm = STATE.floorModel;
+  var units = fm.dailyUnits;
+  var days  = fm.daysPerMonth;
+  var bMins = fm.builderMinutes;
+  var detP  = fm.detailingPct / 100;
+  var hrsPerMonth = 38 * 52 / 12;
+  var monthly = 0;
+  STATE.roster.forEach(function(p){
+    if(!p.active) return;
+    var loaded = p.base * MULTIPLIER + (p.builder ? 0 : 0); // builder bonus handled separately
+    var hrs = p.hrs;
+    monthly += loaded * (hrs * 52 / 12);
+  });
+  return monthly;
+}
+
+// Roster helpers
+function getLoadedRate(base){ return base * MULTIPLIER; }
+function getRosterMonthly(){
+  var total = 0;
+  STATE.roster.forEach(function(p){
+    if(!p.active) return;
+    total += getLoadedRate(p.base) * (p.hrs * 52/12);
+  });
+  return total;
+}
+
+// Format helpers
+function fmt(n, decimals){
+  if(n===null||n===undefined||isNaN(n)) return '—';
+  var d = decimals !== undefined ? decimals : 0;
+  var prefix = n<0 ? '-$' : '$';
+  return prefix + Math.abs(n).toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d});
+}
+function fmtPct(n){ if(n===null||n===undefined||isNaN(n)) return '—'; return (n*100).toFixed(1)+'%'; }
+function fmtK(n){ if(n===null||n===undefined||isNaN(n)) return '—'; return (n<0?'-$':'$')+(Math.abs(n)/1000).toFixed(0)+'k'; }
+function colorClass(n){ return n>0?'pos':n<0?'neg':'neutral'; }
+function deltaClass(n){ return n>0?'pos':n<0?'neg':'neutral'; }
+
+// ── NAVIGATION ────────────────────────────────────────────────────────────────
+var PAGE_TITLES = {overview:'Overview',pl:'Full P&L',categories:'Category Analysis',labor:'Labor Model',scenario:'Scenario Model',actions:'Action Items'};
+function navigate(page){
+  STATE.page = page;
+  document.querySelectorAll('.nav-item').forEach(function(el){
+    el.classList.toggle('active', el.dataset.page === page);
+  });
+  document.getElementById('pageTitle').textContent = PAGE_TITLES[page]||page;
+  render();
+}
+document.getElementById('nav').addEventListener('click', function(e){
+  var item = e.target.closest('.nav-item');
+  if(item && item.dataset.page) navigate(item.dataset.page);
+});
+
+// ── RENDER DISPATCHER ─────────────────────────────────────────────────────────
+function render(){
+  var el = document.getElementById('content');
+  var pages = {overview:renderOverview, pl:renderPL, categories:renderCats, labor:renderLabor, scenario:renderScenario, actions:renderActions};
+  if(pages[STATE.page]) el.innerHTML = pages[STATE.page]();
+  updateBadge();
+  updateScenarioBadge();
+  bindEvents();
+}
+
+function updateBadge(){
+  var count = getAutoAlerts().filter(function(a){return !STATE.dismissedAlerts[a.key];}).length + STATE.actionItems.length;
+  var badge = document.getElementById('navBadge');
+  if(badge){ badge.textContent=count; badge.classList.toggle('hidden', count===0); }
+}
+function updateScenarioBadge(){
+  var el = document.getElementById('scenarioLabel');
+  if(!el) return;
+  var any = STATE.scenarioPct.some(function(p){return p!==0;});
+  if(!any){ el.textContent='Base Scenario'; el.style.background=''; el.style.color=''; return; }
+  var avg = STATE.scenarioPct.reduce(function(a,b){return a+b;},0)/STATE.scenarioPct.length;
+  el.textContent = (avg>0?'+':'')+avg.toFixed(1)+'% avg scenario';
+  el.style.background = avg>=0 ? 'rgba(22,163,74,0.15)' : 'rgba(220,38,38,0.15)';
+  el.style.color = avg>=0 ? 'var(--green)' : 'var(--red)';
+}
+
+// ── OVERVIEW PAGE ─────────────────────────────────────────────────────────────
+function renderOverview(){
+  var ytd_ns=0,ytd_cogs=0,ytd_gp=0,ytd_oc=0,ytd_ni=0;
+  for(var i=0;i<=PDATA.act_thru;i++){
+    ytd_ns+=getNS(i);ytd_cogs+=getCOGS(i);ytd_gp+=getGP(i);ytd_oc+=getOC(i);ytd_ni+=getNI(i);
+  }
+  var fy_ns=0,fy_ni=0,fy_gp=0;
+  for(var i=0;i<12;i++){ fy_ns+=getNS(i);fy_ni+=getNI(i);fy_gp+=getGP(i); }
+  var ytd_gm = ytd_gp/ytd_ns, ytd_nm = ytd_ni/ytd_ns;
+  var fy_gm = fy_gp/fy_ns, fy_nm = fy_ni/fy_ns;
+  var h = '';
+
+  // YTD section
+  h += '<div class="card-title" style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--text3);margin-bottom:10px">Year-to-date actuals &mdash; Jan&ndash;'+MONTHS[PDATA.act_thru]+' 2026</div>';
+  h += '<div class="kpi-grid">';
+  h += kpi('Revenue', fmt(ytd_ns), 'net sales', null);
+  h += kpi('Gross Profit', fmt(ytd_gp), fmtPct(ytd_gm)+' margin', null);
+  h += kpi('Operating Cost', fmt(ytd_oc), fmtPct(ytd_oc/ytd_ns)+' of revenue', null);
+  h += kpi('Net Income', fmt(ytd_ni), fmtPct(ytd_nm)+' net margin', ytd_ni);
+  h += '</div>';
+
+  h += '<div class="divider"></div>';
+
+  // Full year section
+  h += '<div class="card-title" style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--text3);margin-bottom:10px">Full-year projection &mdash; 2026</div>';
+  h += '<div class="kpi-grid">';
+  h += kpi('Revenue', fmt(fy_ns), 'full year', null);
+  h += kpi('Gross Profit', fmt(fy_gp), fmtPct(fy_gm)+' margin', null);
+  h += kpi('Net Income', fmt(fy_ni), fmtPct(fy_nm)+' net margin', fy_ni);
+  h += kpi('Labor % (avg)', fmtPct(labPct()), 'vs 17.6% target', labPct()-0.176);
+  h += '</div>';
+
+  h += '<div class="divider"></div>';
+
+  // Bar chart
+  h += '<div class="card-title" style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--text3);margin-bottom:12px">Monthly net sales</div>';
+  h += renderBarChart();
+
+  return h;
+}
+function labPct(){
+  var ns=0,lab=0;
+  for(var i=3;i<12;i++){ ns+=getNS(i);lab+=getLabor(i); }
+  return ns>0?lab/ns:0;
+}
+function kpi(label, val, sub, delta){
+  var h = '<div class="kpi">';
+  h += '<div class="kpi-label">'+label+'</div>';
+  h += '<div class="kpi-val">'+val+'</div>';
+  h += '<div class="kpi-sub">'+sub+'</div>';
+  if(delta!==null && delta!==undefined){
+    h += '<div class="kpi-delta '+(delta>=0?'pos':'neg')+'">'+(delta>=0?'▲ ':'▼ ')+fmtPct(Math.abs(delta/1e6 > 1 ? delta/1e6 : delta))+'</div>';
+  }
+  h += '</div>';
+  return h;
+}
+function renderBarChart(){
+  var vals = [];
+  for(var i=0;i<12;i++) vals.push(getNS(i));
+  var max = Math.max.apply(null, vals);
+  var h = '<div class="bar-chart">';
+  for(var i=0;i<12;i++){
+    var pct = max>0?vals[i]/max*100:0;
+    var actual = isActual(i);
+    h += '<div class="bar-wrap">';
+    h += '<div class="bar-amt">'+(vals[i]>=1e6?'$'+(vals[i]/1e6).toFixed(1)+'M':'$'+(vals[i]/1000).toFixed(0)+'k')+'</div>';
+    h += '<div class="bar-inner" style="height:'+pct+'%;background:'+(actual?'#dc2626':'rgba(220,38,38,0.35)')+';"></div>';
+    h += '<div class="bar-lbl">'+MONTHS[i]+'</div>';
+    h += '</div>';
+  }
+  h += '</div>';
+  return h;
+}
+
+// ── FULL P&L PAGE ─────────────────────────────────────────────────────────────
+function renderPL(){
+  var h = '';
+  // Scenario bar
+  h += renderScenarioBar();
+  // Table
+  h += '<div class="card" style="padding:0;overflow:hidden">';
+  h += '<table class="tbl">';
+  h += '<thead><tr><th style="text-align:left;padding-left:16px">Category</th>';
+  for(var i=0;i<12;i++) h += '<th>'+(isActual(i)?'<span style="color:var(--text)">':'<span style="color:var(--text3)">')+MONTHS[i]+'</span></th>';
+  h += '<th>FY Total</th></tr></thead><tbody>';
+  var rows = [
+    {key:'ns',   label:'Net Sales',      fn:getNS,    bold:true},
+    {key:'cogs', label:'Cost of Goods',  fn:getCOGS,  indent:true},
+    {key:'gp',   label:'Gross Profit',   fn:getGP,    bold:true, divider:true},
+    {key:'lab',  label:'Labor',          fn:getLabor, indent:true, cat:true},
+    {key:'pp',   label:'Payment Processor', fn:getPP, indent:true},
+    {key:'mkt',  label:'Marketing',      fn:getMkt,   indent:true},
+    {key:'comp', label:'Company Expense',fn:function(i){return getFixed('comp',i);}, indent:true},
+    {key:'rew',  label:'Rewards',        fn:function(i){return getFixed('rew',i);},  indent:true},
+    {key:'bldg', label:'Building',       fn:function(i){return getFixed('bldg',i);}, indent:true},
+    {key:'sw',   label:'Software',       fn:function(i){return getFixed('sw',i);},   indent:true},
+    {key:'pers', label:'Personal',       fn:function(i){return getFixed('pers',i);}, indent:true},
+    {key:'misc', label:'Misc',           fn:function(i){return getFixed('misc',i);}, indent:true},
+    {key:'oc',   label:'Operating Cost', fn:getOC,    bold:true, divider:true},
+    {key:'ni',   label:'Net Income',     fn:getNI,    bold:true, colored:true}
+  ];
+  rows.forEach(function(row){
+    var fy=0;
+    for(var i=0;i<12;i++) fy += row.fn(i)||0;
+    h += '<tr class="'+(row.bold?'total-row':'')+(row.divider?' divider-row':'')+'">';
+    h += '<td style="'+(row.indent?'padding-left:28px;font-size:11px;color:var(--text3)':'')+'">'+(row.bold?'<strong>':'')+row.label+(row.bold?'</strong>':'')+'</td>';
+    for(var i=0;i<12;i++){
+      var v = row.fn(i)||0;
+      var cls = row.colored ? colorClass(v) : '';
+      var act = isActual(i) ? 'style="color:var(--text)"' : '';
+      h += '<td class="'+cls+'" '+act+'>'+fmt(v)+'</td>';
+    }
+    h += '<td class="'+(row.colored?colorClass(fy):'font-bold')+'">'+fmt(fy)+'</td>';
+    h += '</tr>';
+  });
+  h += '</tbody></table></div>';
+  return h;
+}
+
+function renderScenarioBar(){
+  var any = STATE.scenarioPct.some(function(p){return p!==0;});
+  var h = '<div class="scenario-bar">';
+  h += '<label>Revenue scenario</label>';
+  var presets = [[-25,'−25%'],[−15,'−15%'],[−10,'−10%'],[0,'Base'],[10,'+10%'],[15,'+15%'],[20,'+20%']];
+  presets.forEach(function(p){
+    var active = STATE.scenarioPct.every(function(v){return v===p[0];});
+    h += '<button class="preset-btn'+(active?' active':'')+(p[0]<0?' neg-btn':'')+'" onclick="setAllScenario('+p[0]+')">'+p[1]+'</button>';
+  });
+  h += '<div style="flex:1"></div>';
+  if(any) h += '<button class="btn btn-ghost btn-sm" onclick="setAllScenario(0)">↺ Reset</button>';
+  h += '</div>';
+  return h;
+}
+
+// ── CATEGORIES PAGE ───────────────────────────────────────────────────────────
+function renderCats(){
+  var cats = [
+    {key:'labor', label:'Labor',           fn:getLabor,   color:DEPT_COLORS.Building},
+    {key:'pp',    label:'Payment Processor', fn:getPP,    color:DEPT_COLORS.CS},
+    {key:'mkt',   label:'Marketing',        fn:getMkt,    color:'#16a34a'},
+    {key:'comp',  label:'Company Expense',  fn:function(i){return getFixed('comp',i);}, color:'#64748b'},
+    {key:'rew',   label:'Rewards',          fn:function(i){return getFixed('rew',i);},  color:'#ec4899'},
+    {key:'bldg',  label:'Building',         fn:function(i){return getFixed('bldg',i);}, color:'#f59e0b'},
+    {key:'sw',    label:'Software',         fn:function(i){return getFixed('sw',i);},   color:'#8b5cf6'},
+    {key:'pers',  label:'Personal',         fn:function(i){return getFixed('pers',i);}, color:'#06b6d4'},
+    {key:'misc',  label:'Misc',             fn:function(i){return getFixed('misc',i);}, color:'#6b7280'},
+  ];
+  var h = renderScenarioBar();
+  h += '<div class="cat-grid">';
+  cats.forEach(function(cat){
+    var fy=0; for(var i=0;i<12;i++) fy += cat.fn(i)||0;
+    var open = STATE.catOpen[cat.key];
+    h += '<div class="cat-card">';
+    h += '<div class="cat-card-header" onclick="toggleCat(''+cat.key+'')">';
+    h += '<div>';
+    h += '<div class="cat-card-name" style="color:'+cat.color+'">'+cat.label+'</div>';
+    h += '<div class="cat-card-val">'+fmt(fy)+'</div>';
+    h += '</div>';
+    h += '<span style="color:var(--text3);font-size:14px">'+(open?'▲':'▼')+'</span>';
+    h += '</div>';
+    h += '<div class="cat-card-body'+(open?' open':'')+'">';
+    for(var i=0;i<12;i++){
+      var v = cat.fn(i)||0;
+      var act = isActual(i);
+      h += '<div class="cat-row">';
+      h += '<span style="color:'+(act?'var(--text)':'var(--text3)')+'">'+MONTHS[i]+(act?' ●':'')+'</span>';
+      h += '<span class="'+(v<0?'pos':'')+'" style="color:'+(act?'var(--text)':'var(--text2)')+'">'+fmt(v)+'</span>';
+      h += '</div>';
+    }
+    h += '</div></div>';
+  });
+  h += '</div>';
+  return h;
+}
+function toggleCat(key){
+  STATE.catOpen[key] = !STATE.catOpen[key];
+  render();
+}
+
+// ── LABOR MODEL PAGE ──────────────────────────────────────────────────────────
+function renderLabor(){
+  var fm = STATE.floorModel;
+  var units = fm.dailyUnits, days = fm.daysPerMonth;
+  var bMins = fm.builderMinutes, detP = fm.detailingPct;
+  var h = '';
+
+  // ── Section 1: Floor Cost Calculator ──────────────────────────────────────
+  h += '<div class="card">';
+  h += '<div class="card-title">Floor Cost Calculator</div>';
+  h += '<div style="display:grid;grid-template-columns:300px 1fr;gap:24px">';
+
+  // Left: inputs
+  h += '<div>';
+  h += slider('Daily build volume', 'floorUnits', units, 5, 80, 1, 'units/day');
+  h += slider('Days per month', 'floorDays', days, 15, 26, 1, 'days');
+  h += slider('Builder time per PC', 'floorBMins', bMins, 60, 180, 5, 'min');
+  h += slider('% orders needing detailing', 'floorDet', detP, 0, 100, 5, '%');
+  h += '</div>';
+
+  // Right: department table
+  h += '<div>';
+  h += '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;overflow:hidden">';
+  // Table header
+  h += '<div style="display:grid;grid-template-columns:120px 80px 80px 90px 100px 90px;border-bottom:1px solid var(--border2)">';
+  ['Department','Cap/person','You have','Capacity','Surplus/Deficit','Monthly cost'].forEach(function(c,i){
+    h += '<div style="padding:7px 10px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text3);background:var(--surface2);text-align:'+(i>0?'right':'left')+'">'+c+'</div>';
+  });
+  h += '</div>';
+
+  var depts = [
+    {name:'Building',  cap:CAPACITY.Building,  demand:units,                    deptKey:'Building'},
+    {name:'Detailing', cap:CAPACITY.Detailing, demand:units*detP/100,           deptKey:'Detailing'},
+    {name:'Inventory', cap:CAPACITY.Inventory, demand:units,                    deptKey:'Inventory'},
+    {name:'Testing',   cap:CAPACITY.Testing,   demand:units,                    deptKey:'Testing'},
+    {name:'Shipping',  cap:CAPACITY.Shipping,  demand:units,                    deptKey:'Shipping'},
+    {name:'CS',        cap:CAPACITY.CS,        demand:units,                    deptKey:'CS'},
+    {name:'Overhead',  cap:null,               demand:null,                     deptKey:'Testing/RMA'},
+  ];
+
+  depts.forEach(function(dept){
+    // Count active roster members in this dept
+    var members = STATE.roster.filter(function(p){return p.active && p.dept===dept.deptKey;});
+    // Also count building for detailing etc
+    if(dept.deptKey==='Building') members = STATE.roster.filter(function(p){return p.active && p.dept==='Building';});
+    if(dept.deptKey==='CS') members = STATE.roster.filter(function(p){return p.active && p.dept==='CS';});
+    var headcount = members.length;
+    var capacity = dept.cap !== null ? headcount * dept.cap : null;
+    var surplus = capacity !== null ? capacity - dept.demand : null;
+    var monthly = members.reduce(function(s,p){return s + getLoadedRate(p.base)*(p.hrs*52/12);},0);
+    var surplusClr = surplus===null ? '' : surplus<-2 ? 'color:var(--red)' : surplus>dept.cap*0.5 ? 'color:var(--amber)' : 'color:var(--green)';
+    var surplusTxt = surplus===null ? '—' : (surplus>0?'+':'')+surplus.toFixed(1)+' units/day';
+
+    h += '<div style="display:grid;grid-template-columns:120px 80px 80px 90px 100px 90px;border-bottom:1px solid var(--border);align-items:center">';
+    h += '<div style="padding:8px 10px;font-weight:600;color:var(--text);display:flex;align-items:center;gap:6px">';
+    h += '<span style="width:6px;height:6px;border-radius:2px;background:'+(DEPT_COLORS[dept.deptKey]||'#64748b')+';flex-shrink:0"></span>';
+    h += dept.name+'</div>';
+    h += '<div style="padding:8px 10px;text-align:right;color:var(--text3);font-size:11px">'+(dept.cap!==null?dept.cap+'/day':'—')+'</div>';
+    h += '<div style="padding:8px 10px;text-align:right;font-weight:600">'+headcount+'</div>';
+    h += '<div style="padding:8px 10px;text-align:right;color:var(--text2)">'+(capacity!==null?capacity.toFixed(1)+'/day':'—')+'</div>';
+    h += '<div style="padding:8px 10px;text-align:right;font-size:11px;'+surplusClr+'">'+surplusTxt+'</div>';
+    h += '<div style="padding:8px 10px;text-align:right;font-weight:600">'+fmt(monthly)+'</div>';
+    h += '</div>';
+  });
+
+  // Total
+  var totalMonthly = getRosterMonthly();
+  h += '<div style="display:grid;grid-template-columns:120px 80px 80px 90px 100px 90px;background:var(--surface2);align-items:center">';
+  h += '<div style="padding:8px 10px;font-weight:700;color:var(--text)">Total</div>';
+  h += '<div></div><div></div><div></div><div></div>';
+  h += '<div style="padding:8px 10px;text-align:right;font-weight:700;color:var(--text)">'+fmt(totalMonthly)+'/mo</div>';
+  h += '</div>';
+  h += '</div>'; // end table
+  h += '</div>'; // end right col
+  h += '</div>'; // end grid
+  h += '</div>'; // end card
+
+  // ── Section 2: Projection vs Floor Model comparison ────────────────────────
+  h += '<div class="card">';
+  h += '<div class="card-title">Projection Sheet vs Floor Model — Apr–Dec</div>';
+  h += '<div style="overflow-x:auto">';
+  h += '<table class="tbl"><thead><tr><th style="text-align:left">Month</th>';
+  for(var i=3;i<12;i++) h += '<th>'+MONTHS[i]+'</th>';
+  h += '</tr></thead><tbody>';
+  // Proj sheet labor
+  h += '<tr><td>Projection sheet</td>';
+  for(var i=3;i<12;i++){
+    var v = getLaborBase(i);
+    h += '<td style="color:var(--text2)">'+fmt(v)+'</td>';
+  }
+  h += '</tr>';
+  // Floor model
+  h += '<tr><td>Floor model</td>';
+  for(var i=3;i<12;i++){
+    h += '<td style="color:var(--text2)">'+fmt(totalMonthly)+'</td>';
+  }
+  h += '</tr>';
+  // Delta
+  h += '<tr class="total-row"><td>Delta</td>';
+  for(var i=3;i<12;i++){
+    var d = totalMonthly - getLaborBase(i);
+    h += '<td class="'+(d>0?'neg':'pos')+'">'+fmt(d)+'</td>';
+  }
+  h += '</tr>';
+  h += '</tbody></table></div></div>';
+
+  // ── Section 3: Staffing Changes ────────────────────────────────────────────
+  h += '<div class="card">';
+  h += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">';
+  h += '<div class="card-title" style="margin-bottom:0">Staffing Changes</div>';
+  h += '<button class="btn btn-primary btn-sm" onclick="openAddChange()">+ Add Change</button>';
+  h += '</div>';
+  h += '<div id="addChangeForm" class="hidden" style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:16px;margin-bottom:14px">';
+  h += renderAddChangeForm();
+  h += '</div>';
+
+  if(STATE.staffingChanges.filter(function(c){return c.status!=='removed';}).length === 0){
+    h += '<div style="text-align:center;padding:32px;color:var(--text3);font-size:12px">No staffing changes modeled yet. Add a change to see its P&L impact.</div>';
+  } else {
+    STATE.staffingChanges.forEach(function(ch, idx){
+      if(ch.status==='removed') return;
+      h += renderChangeItem(ch, idx);
+    });
+  }
+
+  // Running impact total
+  h += '<div style="margin-top:12px;padding:12px 14px;background:var(--surface2);border:1px solid var(--border);border-radius:8px">';
+  h += '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text3);margin-bottom:8px">Monthly labor impact</div>';
+  h += '<div style="display:flex;gap:24px;flex-wrap:wrap">';
+  for(var i=3;i<12;i++){
+    var delta = getLaborDelta(i);
+    if(Math.abs(delta) < 1) continue;
+    h += '<div style="text-align:center">';
+    h += '<div style="font-size:10px;color:var(--text3)">'+MONTHS[i]+'</div>';
+    h += '<div style="font-size:13px;font-weight:700;'+(delta<0?'color:var(--green)':'color:var(--red)')+'">'+fmt(delta)+'</div>';
+    h += '</div>';
+  }
+  if(!STATE.staffingChanges.some(function(c){return c.status!=='removed' && Math.abs(getLaborDelta(3))>0;})){
+    h += '<span style="color:var(--text3);font-size:11px">No changes applied yet</span>';
+  }
+  h += '</div></div>';
+  h += '</div>'; // end staffing changes card
+
+  return h;
+}
+
+function slider(label, id, val, min, max, step, unit){
+  return '<div style="margin-bottom:14px">' +
+    '<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text3);margin-bottom:5px">' +
+    '<span>'+label+'</span><span style="font-weight:700;color:var(--text)" id="lbl_'+id+'">'+val+' '+unit+'</span></div>' +
+    '<input type="range" min="'+min+'" max="'+max+'" step="'+step+'" value="'+val+'" id="'+id+'" ' +
+    'oninput="onFloorSlider(''+id+'')" style="width:100%">' +
+    '</div>';
+}
+
+function renderAddChangeForm(){
+  var h = '<div class="form-row">';
+  h += '<div class="form-group">';
+  h += '<label>Type</label>';
+  h += '<select id="chType" onchange="onChangeTypeSwitch()">';
+  h += '<option value="layoff">Layoff (permanent)</option>';
+  h += '<option value="hours">Hour reduction (temporary)</option>';
+  h += '</select></div>';
+  h += '<div class="form-group">';
+  h += '<label>Person</label>';
+  h += '<select id="chPerson">';
+  STATE.roster.forEach(function(p){
+    if(p.active) h += '<option value="'+p.id+'">'+p.name+' ('+p.dept+')</option>';
+  });
+  h += '</select></div>';
+  h += '<div class="form-group">';
+  h += '<label>Start month</label>';
+  h += '<select id="chStart">';
+  PROJ_MONTHS.forEach(function(m,idx){ h += '<option value="'+(idx+3)+'">'+m+' 2026</option>'; });
+  h += '</select></div>';
+  h += '<div class="form-group" id="chEndWrap">';
+  h += '<label>End month</label>';
+  h += '<select id="chEnd">';
+  PROJ_MONTHS.forEach(function(m,idx){ h += '<option value="'+(idx+3)+'">'+m+' 2026</option>'; });
+  h += '</select></div>';
+  h += '<div class="form-group" id="chHrsWrap">';
+  h += '<label>New hrs/week</label>';
+  h += '<input type="number" id="chHrs" min="0" max="40" value="20" style="width:80px"/>';
+  h += '</div>';
+  h += '</div>';
+  h += '<div style="display:flex;gap:8px">';
+  h += '<button class="btn btn-primary btn-sm" onclick="addChange()">Add Change</button>';
+  h += '<button class="btn btn-ghost btn-sm" onclick="closeAddChange()">Cancel</button>';
+  h += '</div>';
+  return h;
+}
+
+function renderChangeItem(ch, idx){
+  var monthly = ch.monthlyDelta;
+  var h = '<div class="change-item">';
+  h += '<span class="change-type '+ch.type+'">'+(ch.type==='layoff'?'Layoff':'Hours')+'</span>';
+  h += '<span class="change-name">'+ch.personName+'</span>';
+  if(ch.type==='layoff'){
+    h += '<span class="change-detail">From '+MONTHS[ch.startMonth]+' onward</span>';
+  } else {
+    h += '<span class="change-detail">'+MONTHS[ch.startMonth]+'–'+MONTHS[ch.endMonth]+' · '+ch.newHrs+' hrs/wk</span>';
+  }
+  h += '<span class="change-savings">'+fmt(Math.abs(monthly))+'/mo savings</span>';
+  h += '<span class="change-status '+ch.status+'">'+(ch.status==='draft'?'Draft':ch.status==='sent'?'In ClickUp':'Done')+'</span>';
+  h += '<div style="display:flex;gap:6px;margin-left:auto">';
+  if(ch.status==='draft'){
+    h += '<button class="btn btn-blue btn-sm" onclick="sendToClickUp('+idx+')">→ ClickUp</button>';
+  }
+  h += '<button class="btn btn-ghost btn-sm" onclick="removeChange('+idx+')" style="color:var(--red)">✕</button>';
+  h += '</div>';
+  h += '</div>';
+  return h;
+}
+
+// ── SCENARIO MODEL PAGE ───────────────────────────────────────────────────────
+function renderScenario(){
+  var h = renderScenarioBar();
+  h += '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text3);margin-bottom:10px">Apr–Dec monthly projections</div>';
+  h += '<div style="overflow-x:auto"><table class="tbl"><thead><tr>';
+  h += '<th style="text-align:left;min-width:120px">Line item</th>';
+  for(var i=3;i<12;i++) h += '<th>'+MONTHS[i]+'</th>';
+  h += '<th>Total</th></tr></thead><tbody>';
+  var scenRows = [
+    {label:'Net Sales',       fn:getNS,    bold:true},
+    {label:'Cost of Goods',   fn:getCOGS,  indent:true,  subtext:'70% of NS'},
+    {label:'Gross Profit',    fn:getGP,    bold:true,    divider:true},
+    {label:'Labor',           fn:getLabor, indent:true},
+    {label:'Payment Proc.',   fn:getPP,    indent:true,  subtext:'2.6% of prior NS'},
+    {label:'Marketing',       fn:getMkt,   indent:true,  subtext:'3.3% of NS'},
+    {label:'Company Exp.',    fn:function(i){return getFixed('comp',i);}, indent:true, fixed:true},
+    {label:'Rewards',         fn:function(i){return getFixed('rew',i);},  indent:true, fixed:true},
+    {label:'Building',        fn:function(i){return getFixed('bldg',i);}, indent:true, fixed:true},
+    {label:'Software',        fn:function(i){return getFixed('sw',i);},   indent:true, fixed:true},
+    {label:'Personal',        fn:function(i){return getFixed('pers',i);}, indent:true, fixed:true},
+    {label:'Misc',            fn:function(i){return getFixed('misc',i);}, indent:true, fixed:true},
+    {label:'Operating Cost',  fn:getOC,    bold:true,    divider:true},
+    {label:'Net Income',      fn:getNI,    bold:true,    colored:true},
+    {label:'Labor % of Rev',  fn:function(i){var ns=getNS(i); return ns>0?getLabor(i)/ns:0;}, bold:false, pct:true}
+  ];
+  scenRows.forEach(function(row){
+    var fy=0;
+    for(var i=3;i<12;i++) fy += row.fn(i)||0;
+    h += '<tr'+(row.bold?' class="total-row"':'')+' style="cursor:pointer" onclick="toggleScenRow(''+row.label+'')">'; 
+    var labelStyle = row.indent ? 'padding-left:24px;font-size:11px;' : '';
+    if(row.fixed) labelStyle += 'color:var(--text3);';
+    h += '<td style="'+labelStyle+'">';
+    if(row.subtext) h += '<div style="font-size:9px;color:var(--text3)">'+row.subtext+'</div>';
+    h += row.label+'</td>';
+    for(var i=3;i<12;i++){
+      var v = row.fn(i)||0;
+      var hasDelta = !row.fixed && !row.pct && i>PDATA.act_thru;
+      var proj = row.fn === getNS ? (PDATA.proj_ns[i]||0) :
+                 row.fn === getOC ? (PDATA.proj_oc[i]||0) :
+                 row.fn === getNI ? (PDATA.proj_ni[i]||0) : null;
+      var delta = (hasDelta && proj!==null) ? v - proj : null;
+      h += '<td class="'+(row.colored?colorClass(v):'')+'">';
+      if(row.pct){ h += fmtPct(v); }
+      else {
+        h += fmt(v);
+        if(delta!==null && Math.abs(delta)>100){
+          h += '<div style="font-size:9px;'+(delta>0?'color:var(--green)':'color:var(--red)')+'">'+fmt(delta)+'</div>';
+        }
+      }
+      h += '</td>';
+    }
+    h += '<td class="'+(row.colored?colorClass(fy):'')+(row.bold?' font-bold':'')+'">'+
+      (row.pct ? fmtPct(fy/9) : fmt(fy))+'</td>';
+    h += '</tr>';
+  });
+  h += '</tbody></table></div>';
+  return h;
+}
+
+// ── ACTION ITEMS PAGE ─────────────────────────────────────────────────────────
+function getAutoAlerts(){
+  var alerts = [];
+  for(var i=0;i<=PDATA.act_thru;i++){
+    var ns = getNS(i), ni = getNI(i), lab = getLabor(i);
+    var labPct = ns>0 ? lab/ns : 0;
+    var projNS = PDATA.proj_ns[i]||0;
+    var nsVar = projNS>0 ? (ns-projNS)/projNS : 0;
+    if(labPct>0.176) alerts.push({key:i+'_lab',sev:'warn',mo:MONTHS[i],title:'Labor over threshold',detail:'Labor at '+fmtPct(labPct)+' of revenue vs 17.6% target ('+fmt(lab)+' labor, '+fmt(ns)+' revenue)'});
+    if(nsVar < -0.10) alerts.push({key:i+'_ns',sev:'crit',mo:MONTHS[i],title:'Revenue miss',detail:'Revenue '+fmtPct(nsVar)+' below projection ('+fmt(ns)+' vs '+fmt(projNS)+' projected)'});
+    if(ni<0) alerts.push({key:i+'_ni',sev:'crit',mo:MONTHS[i],title:'Net loss',detail:MONTHS[i]+' net income: '+fmt(ni)});
+  }
+  return alerts;
+}
+function renderActions(){
+  var h = '';
+  // Add item form
+  h += '<div class="card" style="margin-bottom:16px">';
+  h += '<div class="card-title">Add Action Item</div>';
+  h += '<div class="form-row">';
+  h += '<div class="form-group"><label>Month</label><select id="aiMo">';
+  MONTHS.forEach(function(m,i){ h += '<option value="'+i+'">'+m+'</option>'; });
+  h += '</select></div>';
+  h += '<div class="form-group" style="flex:1"><label>Note</label><input type="text" id="aiNote" placeholder="Describe the action item" style="width:100%"/></div>';
+  h += '<div class="form-group"><label>Category</label><select id="aiCat">';
+  ['Labor','Revenue','Marketing','Operations','Finance','Other'].forEach(function(c){ h += '<option>'+c+'</option>'; });
+  h += '</select></div>';
+  h += '<div class="form-group" style="align-self:flex-end"><button class="btn btn-primary" onclick="addActionItem()">Add</button></div>';
+  h += '</div></div>';
+
+  // Auto alerts
+  var alerts = getAutoAlerts().filter(function(a){return !STATE.dismissedAlerts[a.key];});
+  if(alerts.length){
+    h += '<div class="card-title" style="margin-bottom:8px">Auto-detected alerts</div>';
+    alerts.forEach(function(a){
+      h += '<div class="action-item">';
+      h += '<div class="action-sev '+a.sev+'"></div>';
+      h += '<div class="action-body">';
+      h += '<div class="action-title">'+a.mo+' — '+a.title+'</div>';
+      h += '<div class="action-detail">'+a.detail+'</div>';
+      h += '</div>';
+      h += '<button class="btn btn-ghost btn-sm" onclick="dismissAlert(''+a.key+'')">Dismiss</button>';
+      h += '</div>';
+    });
+    h += '<div class="divider"></div>';
+  }
+
+  // Pinned items
+  if(STATE.actionItems.length){
+    h += '<div class="card-title" style="margin-bottom:8px">Action items</div>';
+    STATE.actionItems.forEach(function(item,idx){
+      h += '<div class="action-item">';
+      h += '<div class="action-sev info"></div>';
+      h += '<div class="action-body">';
+      h += '<div class="action-title">'+MONTHS[item.mo||0]+' — '+item.note+'</div>';
+      h += '<div class="action-meta">'+item.cat+' · Added '+(item.date||'')+(item.clickupUrl?' · <a href="'+item.clickupUrl+'" target="_blank" style="color:var(--blue)">ClickUp ↗</a>':'')+'</div>';
+      h += '</div>';
+      if(!item.clickupUrl){
+        h += '<button class="btn btn-blue btn-sm" onclick="sendActionToClickUp('+idx+')">→ ClickUp</button>';
+      }
+      h += '<button class="btn btn-ghost btn-sm" onclick="removeAction('+idx+')" style="color:var(--red)">✕</button>';
+      h += '</div>';
+    });
+  }
+  if(!alerts.length && !STATE.actionItems.length){
+    h += '<div style="text-align:center;padding:48px;color:var(--text3)">No action items. Add one above or they'll auto-generate from actuals.</div>';
+  }
+  return h;
+}
+
+// ── EVENT HANDLERS ────────────────────────────────────────────────────────────
+function bindEvents(){ /* events bound inline */ }
+
+function setAllScenario(pct){
+  STATE.scenarioPct = STATE.scenarioPct.map(function(){return pct;});
+  scheduleSave(); render();
+}
+function toggleScenRow(){ /* future: expand row */ }
+
+function onFloorSlider(id){
+  var val = parseFloat(document.getElementById(id).value);
+  var lbl = document.getElementById('lbl_'+id);
+  var unit = {floorUnits:'units/day',floorDays:'days',floorBMins:'min',floorDet:'%'}[id]||'';
+  if(lbl) lbl.textContent = val + ' ' + unit;
+  var map = {floorUnits:'dailyUnits',floorDays:'daysPerMonth',floorBMins:'builderMinutes',floorDet:'detailingPct'};
+  if(map[id]) STATE.floorModel[map[id]] = val;
+  scheduleSave(); render();
+}
+
+function openAddChange(){
+  var el = document.getElementById('addChangeForm');
+  if(el) el.classList.remove('hidden');
+}
+function closeAddChange(){
+  var el = document.getElementById('addChangeForm');
+  if(el) el.classList.add('hidden');
+}
+function onChangeTypeSwitch(){
+  var type = document.getElementById('chType').value;
+  var endWrap = document.getElementById('chEndWrap');
+  var hrsWrap = document.getElementById('chHrsWrap');
+  if(endWrap) endWrap.style.display = type==='layoff' ? 'none' : '';
+  if(hrsWrap) hrsWrap.style.display = type==='layoff' ? 'none' : '';
+}
+function addChange(){
+  var type      = document.getElementById('chType').value;
+  var personId  = document.getElementById('chPerson').value;
+  var startMonth= parseInt(document.getElementById('chStart').value);
+  var endMonth  = type==='layoff' ? 11 : parseInt(document.getElementById('chEnd').value);
+  var newHrs    = type==='layoff' ? 0 : parseInt(document.getElementById('chHrs').value||0);
+  var person    = STATE.roster.find(function(p){return p.id===personId;});
+  if(!person) return;
+  var loaded    = getLoadedRate(person.base);
+  var hrsPerMonth = person.hrs * 52/12;
+  var newHrsPerMonth = newHrs * 52/12;
+  var delta = type==='layoff'
+    ? -(loaded * hrsPerMonth)
+    : -(loaded * (hrsPerMonth - newHrsPerMonth));
+  STATE.staffingChanges.push({
+    type: type,
+    personId: personId,
+    personName: person.name,
+    startMonth: startMonth,
+    endMonth: endMonth,
+    newHrs: newHrs,
+    monthlyDelta: delta,
+    status: 'draft',
+    id: Date.now()
+  });
+  closeAddChange();
+  scheduleSave(); render();
+}
+function removeChange(idx){
+  STATE.staffingChanges[idx].status = 'removed';
+  scheduleSave(); render();
+}
+
+async function sendToClickUp(idx){
+  var ch = STATE.staffingChanges[idx];
+  var name = ch.type==='layoff'
+    ? '[Labor] Lay off '+ch.personName+' from '+MONTHS[ch.startMonth]+' — saves '+fmt(Math.abs(ch.monthlyDelta))+'/mo'
+    : '[Labor] Reduce '+ch.personName+' hours '+MONTHS[ch.startMonth]+'–'+MONTHS[ch.endMonth]+' ('+ch.newHrs+' hrs/wk) — saves '+fmt(Math.abs(ch.monthlyDelta))+'/mo';
+  var desc = 'Staffing change modeled in P&L Dashboard.
+
+Person: '+ch.personName+'
+Type: '+ch.type+'
+Effective: '+MONTHS[ch.startMonth]+(ch.type==='hours'?'–'+MONTHS[ch.endMonth]:' onwards')+'
+Monthly savings: '+fmt(Math.abs(ch.monthlyDelta))+'
+
+Status: Pending implementation. Upload updated projection sheet when complete.';
+  try{
+    var r = await fetch('/api/clickup/task',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:name,description:desc,priority:2})});
+    var d = await r.json();
+    if(d.ok){ STATE.staffingChanges[idx].status='sent'; STATE.staffingChanges[idx].clickupUrl=d.taskUrl; scheduleSave(); render(); }
+    else{ alert('ClickUp error: '+d.error); }
+  }catch(e){ alert('Failed to send to ClickUp: '+e.message); }
+}
+
+function addActionItem(){
+  var mo   = parseInt(document.getElementById('aiMo').value);
+  var note = document.getElementById('aiNote').value.trim();
+  var cat  = document.getElementById('aiCat').value;
+  if(!note) return;
+  STATE.actionItems.push({mo:mo,note:note,cat:cat,date:new Date().toLocaleDateString()});
+  document.getElementById('aiNote').value='';
+  scheduleSave(); render();
+}
+function removeAction(idx){
+  STATE.actionItems.splice(idx,1);
+  scheduleSave(); render();
+}
+function dismissAlert(key){
+  STATE.dismissedAlerts[key]=true;
+  scheduleSave(); render();
+}
+async function sendActionToClickUp(idx){
+  var item = STATE.actionItems[idx];
+  var name = '['+item.cat+'] '+MONTHS[item.mo||0]+' — '+item.note;
+  try{
+    var r = await fetch('/api/clickup/task',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:name,priority:3})});
+    var d = await r.json();
+    if(d.ok){ STATE.actionItems[idx].clickupUrl=d.taskUrl; scheduleSave(); render(); }
+    else{ alert('ClickUp error: '+d.error); }
+  }catch(e){ alert('Failed to send: '+e.message); }
+}
+
+// ── UPLOAD HANDLING ───────────────────────────────────────────────────────────
+var uploadType = null;
+function triggerUpload(type){
+  uploadType = type;
+  document.getElementById('uploadInput').click();
+}
+document.getElementById('uploadInput').addEventListener('change', async function(e){
+  var file = e.target.files[0];
+  if(!file) return;
+  var fd = new FormData();
+  fd.append('file', file);
+  try{
+    var r = await fetch('/api/upload/'+uploadType,{method:'POST',body:fd});
+    var d = await r.json();
+    if(d.ok){ alert(uploadType+' uploaded successfully. Reload the page to apply.'); }
+    else{ alert('Upload failed: '+d.error); }
+  }catch(err){ alert('Upload error: '+err.message); }
+  e.target.value='';
+});
+
+// ── INIT ──────────────────────────────────────────────────────────────────────
+(async function(){
+  await loadState();
+  if(!STATE.roster || !STATE.roster.length){
+    // Fall back to embedded defaults
+    var r = await fetch('/api/state');
+    var s = await r.json();
+    if(s.roster) STATE.roster = s.roster;
+  }
+  render();
+})();
+</script>
+</body>
+</html>

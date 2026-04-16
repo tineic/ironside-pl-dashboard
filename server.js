@@ -58,14 +58,20 @@ function writeState(state) {
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
+app.get('/', (req, res) => {
+  const cookie = (req.headers.cookie || '').split(';').find(c => c.trim().startsWith('auth='));
+  if (cookie && cookie.split('=')[1] === PASS) return res.redirect('/app');
+  res.sendFile(path.join(__dirname, 'public', 'login.html'));
+});
+
 app.use((req, res, next) => {
-  if (req.path === '/login' || req.path === '/auth') return next();
-  const token = req.headers['x-auth-token'] || req.query.token;
-  if (token === PASS) return next();
+  if (req.path === '/auth') return next();
   const cookie = (req.headers.cookie || '').split(';').find(c => c.trim().startsWith('auth='));
   if (cookie && cookie.split('=')[1] === PASS) return next();
-  if (req.path === '/' || req.path === '') return res.sendFile(path.join(__dirname, 'public', 'login.html'));
-  return res.status(401).json({ error: 'Unauthorized' });
+  const token = req.headers['x-auth-token'] || req.query.token;
+  if (token === PASS) return next();
+  if (req.path.startsWith('/api')) return res.status(401).json({ error: 'Unauthorized' });
+  return res.redirect('/');
 });
 
 app.post('/auth', (req, res) => {

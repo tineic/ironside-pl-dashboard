@@ -18,6 +18,17 @@
   --purple:#7c3aed;--purple-l:#f5f3ff;--purple-b:#ddd6fe;
   --yellow:#92400e;--yellow-l:#fffbeb;--yellow-b:#fde68a;
 }
+[data-theme="dark"]{
+  --bg:#0d0f14;--surface:#151820;--s2:#1c2030;--s3:#1c2030;
+  --topbar-bg:#0d0f14;
+  --border:rgba(255,255,255,0.07);--b2:rgba(255,255,255,0.15);
+  --text:#e8eaf0;--t2:#9ca3af;--muted:#6b7280;--m2:#4b5563;
+  --blue:#3b82f6;--blue-l:rgba(59,130,246,0.12);--blue-b:rgba(59,130,246,0.3);
+  --green:#16a34a;--green-l:rgba(22,163,74,0.12);--green-b:rgba(22,163,74,0.3);
+  --red:#ef4444;--red-l:rgba(239,68,68,0.12);--red-b:rgba(239,68,68,0.3);
+  --orange:#d97706;--orange-l:rgba(217,119,6,0.12);--orange-b:rgba(217,119,6,0.3);
+  --purple:#8b5cf6;--purple-l:rgba(139,92,246,0.12);--purple-b:rgba(139,92,246,0.3);
+}
 body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);font-size:13px;-webkit-font-smoothing:antialiased}
 h2{font-family:'DM Serif Display',serif;font-weight:400}
 .vtag{position:fixed;bottom:12px;right:14px;background:var(--blue);color:#fff;font-size:10px;font-weight:700;padding:3px 8px;border-radius:10px;z-index:999;letter-spacing:.05em}
@@ -198,7 +209,7 @@ input[type=file]{display:none}
 
 /* ── LAYOUT ──────────────────────────────────────────────────────────────────*/
 .shell{display:grid;grid-template-columns:220px 1fr;grid-template-rows:56px 1fr;min-height:100vh}
-.topbar{grid-column:1/-1;background:#1B3A5C;display:flex;align-items:center;padding:0 24px;gap:14px;position:sticky;top:0;z-index:100}
+.topbar{grid-column:1/-1;background:var(--topbar-bg, #1B3A5C);display:flex;align-items:center;padding:0 24px;gap:14px;position:sticky;top:0;z-index:100}
 .topbar-logo{font-size:16px;font-weight:700;color:#fff;letter-spacing:-.3px;font-family:'DM Serif Display',serif}
 .topbar-badge{font-size:11px;padding:3px 10px;border-radius:20px;background:rgba(255,255,255,.12);color:rgba(255,255,255,.7);border:1px solid rgba(255,255,255,.15)}
 .topbar-alert{font-size:11px;padding:4px 12px;border-radius:20px;background:var(--orange);color:#fff;font-weight:700;cursor:pointer;margin-left:auto;display:flex;align-items:center;gap:5px;border:none;font-family:'DM Sans',sans-serif;transition:opacity .12s}
@@ -227,6 +238,8 @@ input[type=file]{display:none}
     &#9888; <span id="alertCount">—</span> Action Items
   </button>
   <span id="syncStatus" style="font-size:10px;color:rgba(255,255,255,.5);margin-left:4px"></span>
+  <span id="serverSaveStatus" style="font-size:10px;color:rgba(255,255,255,.4);margin-left:8px"></span>
+  <button id="themeToggle" onclick="toggleTheme()" style="margin-left:10px;padding:5px 12px;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;color:#fff">&#9790; Dark</button>
 </header>
 
 <!-- SIDEBAR -->
@@ -1431,21 +1444,19 @@ async function syncFromSheet(){
 }
 
 async function pushPinToSheet(pin){
-  setSyncStatus('Saving…');
+  if(!pin || !pin.note) return;
+  var taskName = '[' + (pin.cat||'Action') + '] ' + (pin.mo_label||MONTHS[pin.month]||'') + (pin.mo_label||pin.month!=null?' - ':'') + pin.note;
+  var desc = 'Ironside P&L Dashboard action item.\nMonth: '+(pin.mo_label||MONTHS[pin.month]||'')+'\nCategory: '+(pin.cat||'')+'\nNote: '+pin.note+'\nAdded by: '+(pin.added_by||'');
   try{
-    await fetch(SHEET_URL, {
+    var r = await fetch('/api/clickup/task',{
       method:'POST',
-      mode:'no-cors',
       headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({
-        action:'add', id:String(pin.id), timestamp:pin.timestamp,
-        month:pin.mo, category:pin.cat, note:pin.txt, added_by:pin.addedBy||''
-      })
+      body:JSON.stringify({name:taskName, description:desc, priority:3})
     });
-    setSyncStatus('✓ Saved to sheet');
-  }catch(e){
-    setSyncStatus('Saved locally');
-  }
+    var d = await r.json();
+    if(d.ok){ pin.clickupUrl=d.taskUrl; pin.clickupId=d.taskId; pin.synced=true; }
+    else { console.error('ClickUp error:', d.error); }
+  } catch(e){ console.error('ClickUp failed:', e.message); }
 }
 
 async function pushDismissToSheet(pinId){
@@ -2442,6 +2453,14 @@ function toggleLaborExpand(i){
 function clearLaborOverride(i){
   STATE.laborOverrides[i] = {};
   render();
+}
+
+function toggleTheme(){
+  var dark = document.documentElement.getAttribute('data-theme')==='dark';
+  document.documentElement.setAttribute('data-theme', dark ? '' : 'dark');
+  localStorage.setItem('ironsideTheme', dark ? 'light' : 'dark');
+  var btn = document.getElementById('themeToggle');
+  if(btn) btn.textContent = dark ? '&#9790; Dark' : '&#9728; Light';
 }
 
 function toggleSection(id){

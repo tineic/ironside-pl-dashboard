@@ -386,6 +386,7 @@ var STATE = {
   laborOverrides: {},
   customItems: [],     // user-pinned action items
   dismissedAlerts: {}, // key: mo+'|'+cat+'|'+txt substring, dismissed auto-alerts
+  clickupSent: {},     // key: alertKey or pin_id -> clickup task URL
   panelOpen: {},       // tracks open collapsible panels across re-renders
 };
 
@@ -1372,7 +1373,8 @@ function saveToServer(){
           laborOverrides: STATE.laborOverrides,
           customItems: STATE.customItems,
           dismissedAlerts: STATE.dismissedAlerts,
-          staffingChanges: STATE.staffingChanges || []
+          staffingChanges: STATE.staffingChanges || [],
+        clickupSent: STATE.clickupSent || {}
         })
       });
       var el = document.getElementById('serverSaveStatus');
@@ -1561,7 +1563,7 @@ async function bulkSendToClickUp(){
       try{
         var r = await fetch('/api/clickup/task',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:taskName,description:desc,priority:3})});
         var d = await r.json();
-        if(d.ok){ pin.clickupUrl=d.taskUrl; pin.clickupId=d.taskId; sent++; }
+        if(d.ok){ pin.clickupUrl=d.taskUrl; pin.clickupId=d.taskId; STATE.clickupSent['pin_'+pinId]=d.taskUrl; sent++; }
         else { failed++; }
       } catch(e){ failed++; }
     } else {
@@ -1579,7 +1581,7 @@ async function bulkSendToClickUp(){
       try{
         var r2 = await fetch('/api/clickup/task',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:taskName,description:desc,priority:2})});
         var d2 = await r2.json();
-        if(d2.ok){ sent++; } else { failed++; }
+        if(d2.ok){ STATE.clickupSent[ckid]=d2.taskUrl; sent++; } else { failed++; }
       } catch(e){ failed++; }
     }
   }
@@ -1667,9 +1669,14 @@ function renderActionsPage(){
   h += '</div>';
 
   // Combine all items
-  var allItems = autoAlerts.map(function(a){ return Object.assign({},a,{isAuto:true, ckid:'auto_'+alertKey(a).replace(/[|\s]/g,'_')}); });
+  var allItems = autoAlerts.map(function(a){
+    var ckid = 'auto_'+alertKey(a).replace(/[|\s]/g,'_');
+    var url = STATE.clickupSent ? (STATE.clickupSent[ckid]||null) : null;
+    return Object.assign({},a,{isAuto:true, ckid:ckid, clickupUrl:url});
+  });
   STATE.customItems.forEach(function(it){
-    allItems.push({mo:it.mo, cat:it.cat, txt:it.txt, sev:it.sev||'info', custom:true, id:it.id, isAuto:false, ckid:'pin_'+it.id, clickupUrl:it.clickupUrl, addedBy:it.addedBy, timestamp:it.timestamp});
+    var url = it.clickupUrl || (STATE.clickupSent ? STATE.clickupSent['pin_'+it.id] : null) || null;
+    allItems.push({mo:it.mo, cat:it.cat, txt:it.txt, sev:it.sev||'info', custom:true, id:it.id, isAuto:false, ckid:'pin_'+it.id, clickupUrl:url, addedBy:it.addedBy, timestamp:it.timestamp});
   });
 
   if(allItems.length === 0){
@@ -2753,6 +2760,7 @@ buildScenarioTable();
       if(s.customItems) STATE.customItems = s.customItems;
       if(s.dismissedAlerts) STATE.dismissedAlerts = s.dismissedAlerts;
       if(s.staffingChanges) STATE.staffingChanges = s.staffingChanges;
+    if(s.clickupSent) STATE.clickupSent = s.clickupSent;
     }
   } catch(e) { console.log('Server load failed, using local state'); }
   render();

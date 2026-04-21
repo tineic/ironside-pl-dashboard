@@ -1490,6 +1490,14 @@ function addCustomItem(){
   render();
 }
 
+async function sendPinToClickUp(id){
+  var pin = STATE.customItems.find(function(p){ return p.id===id; });
+  if(!pin) return;
+  await pushPinToSheet(pin);
+  savePinsLocally();
+  render();
+}
+
 function removeCustomItem(id){
   STATE.customItems = STATE.customItems.filter(function(it){ return String(it.id) !== String(id); });
   savePinsLocally();
@@ -1617,9 +1625,18 @@ function renderActionsPage(){
       h += '<div style="font-size:13px;color:var(--t2);line-height:1.5">'+a.txt+'</div>';
       h += '</div>';
       if(a.custom){
+        // Find the original pin to check clickupUrl
+        var origPin = STATE.customItems.find(function(p){ return p.id===a.id; });
+        h += '<div style="display:flex;flex-direction:column;gap:4px;align-self:flex-start;flex-shrink:0">';
+        if(origPin && origPin.clickupUrl){
+          h += '<a href="'+origPin.clickupUrl+'" target="_blank" style="font-size:10px;padding:3px 8px;border:1px solid var(--blue-b);border-radius:6px;background:var(--blue-l);color:var(--blue);text-decoration:none;white-space:nowrap">&#128279; ClickUp</a>';
+        } else {
+          h += '<button onclick="sendPinToClickUp('+a.id+')" style="font-size:10px;padding:3px 8px;border:1px solid var(--blue-b);border-radius:6px;background:var(--blue-l);color:var(--blue);cursor:pointer;white-space:nowrap">&#8594; ClickUp</button>';
+        }
         h += '<button onclick="removeCustomItem('+a.id+')" title="Remove" ';
-        h += 'style="padding:2px 8px;border:1px solid var(--b2);border-radius:6px;background:var(--surface);color:var(--muted);font-size:13px;line-height:1;cursor:pointer;flex-shrink:0;align-self:flex-start">';
+        h += 'style="padding:2px 8px;border:1px solid var(--b2);border-radius:6px;background:var(--surface);color:var(--muted);font-size:13px;line-height:1;cursor:pointer">';
         h += '×</button>';
+        h += '</div>';
       } else {
         h += '<button onclick="dismissAlert(\"'+itemKey+'\")" title="Dismiss" ';
         h += 'style="padding:2px 8px;border:1px solid var(--b2);border-radius:6px;background:var(--surface);color:var(--muted);font-size:13px;line-height:1;cursor:pointer;flex-shrink:0;align-self:flex-start">';

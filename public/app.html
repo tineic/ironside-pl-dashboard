@@ -1494,20 +1494,20 @@ function addCustomItem(){
 
 async function sendAlertToClickUp(key, cat, mo){
   var taskName = '[' + (cat||'Alert') + '] ' + (mo||'') + (mo?' - ':'') + 'Review required';
-  // Find the alert text from auto-alerts
-  var alerts = getAutoAlerts ? getAutoAlerts() : [];
-  var alert = alerts.find(function(a){ return alertKey(a)===key; });
-  var desc = alert ? alert.txt : 'Auto-detected alert from P&L Dashboard.\nMonth: '+(mo||'')+'\nCategory: '+(cat||'');
+  var allAlerts = buildAlerts ? buildAlerts() : [];
+  var foundAlert = allAlerts.find(function(a){ return alertKey(a)===key; });
+  var desc = foundAlert ? foundAlert.txt : 'Auto-detected alert.\nMonth: '+(mo||'')+'\nCategory: '+(cat||'');
+  var fullDesc = 'Auto-detected alert from Ironside P&L Dashboard.\nMonth: '+(mo||'')+'\nCategory: '+(cat||'')+'\n\nDetail: '+desc;
   try{
     var r = await fetch('/api/clickup/task',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({name:taskName, description:desc, priority:2})
+      body:JSON.stringify({name:taskName, description:fullDesc, priority:2})
     });
     var d = await r.json();
-    if(d.ok){ alert('Sent to ClickUp! Task: '+d.taskUrl); }
-    else { alert('ClickUp error: '+d.error); }
-  } catch(e){ alert('Failed: '+e.message); }
+    if(d.ok){ window.alert('Sent to ClickUp!'); }
+    else { window.alert('ClickUp error: '+(d.error||'unknown')); }
+  } catch(e){ window.alert('Failed: '+e.message); }
 }
 
 async function sendPinToClickUp(id){
@@ -1827,6 +1827,59 @@ function calcStaffing(units, detPct){
 
 
 
+function renderCalcResults(){
+  var u  = CALC_STATE.dailyUnits;
+  var dp = CALC_STATE.detailingPct / 100;
+  var bm = CALC_STATE.buildMins;
+  var ph = CALC_STATE.projHrs;
+  var avgLoaded = STAFF.reduce(function(s,e){ return s+e.loaded; }, 0) / STAFF.length;
+  var buildMin = bm;
+  var detMin   = (60 / CAPACITY.detailer) * dp;
+  var invMin   = 60 / CAPACITY.inventory;
+  var tstMin   = 5;
+  var shpMin   = 18;
+  var csMin    = 60 / CAPACITY.cs;
+  var tot = buildMin + detMin + invMin + tstMin + shpMin + csMin;
+  var proj = ph * 60;
+  var buf  = proj - tot;
+  var st = calcStaffing(u, dp);
+  var h = '';
+  // Metrics
+  h += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px">';
+  var metrics = [{lbl:'Actual mins/PC',val:Math.round(tot)+' min'},{lbl:'Actual hrs/PC',val:(tot/60).toFixed(2)+' hrs'},{lbl:'Cost @ avg loaded',val:'$'+(tot*avgLoaded/60).toFixed(2)}];
+  metrics.forEach(function(m){
+    h += '<div style="background:var(--s2);border:1px solid var(--border);border-radius:8px;padding:10px;text-align:center">';
+    h += '<div style="font-size:16px;font-weight:700">'+m.val+'</div>';
+    h += '<div style="font-size:9px;color:var(--muted);margin-top:3px;text-transform:uppercase;letter-spacing:.06em">'+m.lbl+'</div>';
+    h += '</div>';
+  });
+  h += '</div>';
+  // Bars
+  var rows = [
+    {l:'Building (1.5 hrs)',v:bm,c:'#8b5cf6'},{l:'Detailing (blended)',v:detMin,c:'#f59e0b'},
+    {l:'CS overhead',v:csMin,c:'#3b82f6'},{l:'Inventory',v:invMin,c:'#10b981'},
+    {l:'Shipping',v:shpMin,c:'#ec4899'},{l:'Testing (hands-on)',v:tstMin,c:'#06b6d4'}
+  ].sort(function(a,b){return b.v-a.v;});
+  var mx = rows[0].v;
+  rows.forEach(function(r){
+    var w = (r.v/mx*100).toFixed(1);
+    h += '<div style="display:flex;align-items:center;gap:6px;margin-bottom:5px;font-size:11px">';
+    h += '<div style="width:130px;text-align:right;color:var(--muted);flex-shrink:0">'+r.l+'</div>';
+    h += '<div style="flex:1;height:14px;background:var(--s3);border-radius:3px;overflow:hidden">';
+    h += '<div style="height:100%;width:'+w+'%;background:'+r.c+';border-radius:3px"></div></div>';
+    h += '<div style="width:52px;font-weight:600">'+r.v.toFixed(1)+'</div>';
+    h += '</div>';
+  });
+  // vs projection note
+  var bufClr = buf >= 0 ? 'var(--green)' : 'var(--red)';
+  h += '<div style="margin-top:10px;padding:10px 12px;background:var(--s2);border-radius:8px;font-size:11px;color:var(--t2);line-height:1.7">';
+  h += '<strong>vs '+ph.toFixed(2)+'-hr projection:</strong> <span style="font-weight:700;color:'+bufClr+'">'+(buf>=0?'+':'')+Math.round(buf)+' min buffer</span>';
+  h += ' &middot; ~'+(buf/bm).toFixed(1)+' full rebuilds worth of RMA time<br>';
+  h += '<strong>Staffing:</strong> '+st.builders+' builder'+(st.builders!==1?'s':'')+' &middot; '+st.detailers+' detailer'+(st.detailers!==1?'s':'')+' for '+Math.round(u*dp)+' detailed/day';
+  h += '</div>';
+  return h;
+}
+
 function renderPCCalc(){
   var u  = CALC_STATE.dailyUnits;
   var dp = CALC_STATE.detailingPct / 100;
@@ -1929,13 +1982,18 @@ function onCalcSlider(){
   CALC_STATE.projHrs       = parseFloat(document.getElementById('calcProj').value);
 
   // Update labels inline without full re-render
-  document.getElementById('clbl_calcUnits').textContent = CALC_STATE.dailyUnits + ' units/day';
-  document.getElementById('clbl_calcDet').textContent   = CALC_STATE.detailingPct + '%';
-  document.getElementById('clbl_calcBuild').textContent = CALC_STATE.buildMins + ' min';
-  document.getElementById('clbl_calcProj').textContent  = CALC_STATE.projHrs.toFixed(2) + ' hrs';
+  var u = document.getElementById('clbl_calcUnits');  if(u) u.textContent = CALC_STATE.dailyUnits + ' units/day';
+  var d = document.getElementById('clbl_calcDet');    if(d) d.textContent = CALC_STATE.detailingPct + '%';
+  var b = document.getElementById('clbl_calcBuild');  if(b) b.textContent = CALC_STATE.buildMins + ' min';
+  var p = document.getElementById('clbl_calcProj');   if(p) p.textContent = CALC_STATE.projHrs.toFixed(2) + ' hrs';
 
-  // Re-render the full labor page so the scenario table updates too
-  render();
+  // Update only the results area without closing panels
+  var resultsEl = document.getElementById('calcResults');
+  if(resultsEl){
+    resultsEl.innerHTML = renderCalcResults();
+  } else {
+    render(); // fallback
+  }
 }
 
 // ── LABOR MODEL PAGE ─────────────────────────────────────────────────────────
@@ -2505,7 +2563,14 @@ function toggleTheme(){
 
 function toggleSection(id){
   STATE.panelOpen[id] = !STATE.panelOpen[id];
-  render();
+  // Re-render just the labor page content, not the whole app
+  if(STATE.tab === 'labor'){
+    var el = document.getElementById('mainContent');
+    if(el) el.innerHTML = renderLaborPage();
+    else render();
+  } else {
+    render();
+  }
 }
 
 // ── CONTROLLER ────────────────────────────────────────────────────────────────

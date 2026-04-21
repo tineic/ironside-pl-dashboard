@@ -1473,24 +1473,10 @@ async function pushDismissToSheet(pinId){
 }
 // ── PIN ACTIONS ───────────────────────────────────────────────────────────────
 function addCustomItem(){
-  var cat  = document.getElementById('ciCat').value.trim();
-  var note = document.getElementById('ciNote').value.trim();
-  var mo   = document.getElementById('ciMo').value;
-  var by   = document.getElementById('ciBy') ? document.getElementById('ciBy').value.trim() : '';
-  if(!note) return;
-  var pin = {
-    id: Date.now(),
-    timestamp: new Date().toISOString(),
-    mo: mo||'General', cat: cat||'Custom',
-    txt: note, addedBy: by,
-    sev: 'info', custom: true
-  };
-  STATE.customItems.push(pin);
-  document.getElementById('ciNote').value = '';
-  savePinsLocally();
-  pushPinToSheet(pin);
-  render();
+  var form = document.getElementById('addItemForm');
+  if(form){ form.style.display = form.style.display==='none' ? 'block' : 'none'; }
 }
+
 
 async function sendAlertToClickUp(key, cat, mo){
   var taskName = '[' + (cat||'Alert') + '] ' + (mo||'') + (mo?' - ':'') + 'Review required';
@@ -1548,69 +1534,101 @@ buildAlerts = function(){
   return alerts;
 };
 
+function selectAllActionItems(val){
+  document.querySelectorAll('[id^="ck_"]').forEach(function(cb){ if(!cb.disabled) cb.checked = val; });
+}
+
+async function bulkSendToClickUp(){
+  var checked = Array.from(document.querySelectorAll('[id^="ck_"]:checked')).map(function(cb){ return cb.id.replace('ck_',''); });
+  if(!checked.length){ window.alert('No items selected.'); return; }
+
+  var autoAlerts = _origBuildAlerts();
+  var sent = 0, failed = 0;
+
+  for(var i=0; i<checked.length; i++){
+    var ckid = checked[i];
+    var taskName, desc;
+
+    if(ckid.startsWith('pin_')){
+      // Custom pin
+      var pinId = parseInt(ckid.replace('pin_',''));
+      var pin = STATE.customItems.find(function(p){ return p.id===pinId; });
+      if(!pin) continue;
+      var text = pin.txt || pin.note || '';
+      var month = pin.mo_label || pin.mo || '';
+      taskName = '[' + (pin.cat||'Action') + '] ' + (month?month+' - ':'') + text;
+      desc = 'P&L Dashboard action item.\nMonth: '+month+'\nCategory: '+(pin.cat||'')+'\nNote: '+text+'\nAdded by: '+(pin.addedBy||'');
+      try{
+        var r = await fetch('/api/clickup/task',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:taskName,description:desc,priority:3})});
+        var d = await r.json();
+        if(d.ok){ pin.clickupUrl=d.taskUrl; pin.clickupId=d.taskId; sent++; }
+        else { failed++; }
+      } catch(e){ failed++; }
+    } else {
+      // Auto alert — decode from ckid
+      var keyPart = ckid.replace('auto_','').replace(/_/g,'|');
+      var alert = autoAlerts.find(function(a){ return alertKey(a).replace(/[|\s]/g,'_') === ckid.replace('auto_',''); });
+      if(!alert){
+        // fallback: use cat from ckid
+        taskName = '[Alert] ' + ckid.replace('auto_','').replace(/_/g,' ');
+        desc = 'Auto-detected alert from P&L Dashboard.';
+      } else {
+        taskName = '[' + (alert.cat||'Alert') + '] ' + alert.mo + ' - ' + alert.txt.substring(0,60);
+        desc = 'Auto-detected alert from P&L Dashboard.\nMonth: '+alert.mo+'\nCategory: '+(alert.cat||'')+'\nDetail: '+alert.txt;
+      }
+      try{
+        var r2 = await fetch('/api/clickup/task',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:taskName,description:desc,priority:2})});
+        var d2 = await r2.json();
+        if(d2.ok){ sent++; } else { failed++; }
+      } catch(e){ failed++; }
+    }
+  }
+
+  savePinsLocally();
+  render();
+  window.alert(sent+' item'+(sent!==1?'s':'')+' sent to ClickUp.'+(failed?' '+failed+' failed.':''));
+}
+
 function renderActionsPage(){
   var autoAlerts = _origBuildAlerts();
   var ATH = D.act_thru;
 
   var SEV={
-    over:{bg:'var(--red-l)',   bd:'var(--red-b)',   tc:'var(--red)',   icon:'⚠'},
-    warn:{bg:'var(--orange-l)',bd:'var(--orange-b)',tc:'var(--orange)', icon:'⚠'},
-    info:{bg:'var(--blue-l)',  bd:'var(--blue-b)',  tc:'var(--blue)',  icon:'ℹ'},
-    good:{bg:'var(--green-l)', bd:'var(--green-b)', tc:'var(--green)', icon:'✓'},
+    over:{bg:'var(--red-l)',   bd:'var(--red-b)',   tc:'var(--red)',   icon:'&#9888;'},
+    warn:{bg:'var(--orange-l)',bd:'var(--orange-b)',tc:'var(--orange)', icon:'&#9888;'},
+    info:{bg:'var(--blue-l)',  bd:'var(--blue-b)',  tc:'var(--blue)',  icon:'&#8505;'},
+    good:{bg:'var(--green-l)', bd:'var(--green-b)', tc:'var(--green)', icon:'&#10003;'},
   };
 
-  var h = '<div style="margin-bottom:20px;display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap">';
+  var h = '';
+  h += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">';
   h += '<div>';
-  h += '<h2 style="font-size:20px;letter-spacing:-.02em;margin-bottom:4px">Action Items</h2>';
+  h += '<h2 style="font-size:20px;letter-spacing:-.02em;margin-bottom:3px">Action Items</h2>';
   h += '<p style="font-size:12px;color:var(--muted)">Jan–'+MONTHS[ATH]+' actuals &nbsp;&middot;&nbsp; '+autoAlerts.length+' auto-flagged &nbsp;&middot;&nbsp; '+STATE.customItems.length+' pinned</p>';
+  h += '</div>';
+  h += '<div style="display:flex;gap:8px;align-items:center">';
+  h += '<button onclick="selectAllActionItems(true)" style="font-size:11px;color:var(--blue);background:none;border:none;cursor:pointer;font-weight:600">All</button>';
+  h += '<span style="color:var(--m2);font-size:11px">/</span>';
+  h += '<button onclick="selectAllActionItems(false)" style="font-size:11px;color:var(--muted);background:none;border:none;cursor:pointer;font-weight:600">None</button>';
+  h += '<button onclick="bulkSendToClickUp()" style="padding:7px 16px;background:#7B68EE;color:#fff;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">';
+  h += '&#8594; Send Selected to ClickUp</button>';
+  h += '<button onclick="addCustomItem()" style="padding:7px 16px;background:var(--blue);color:#fff;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">';
+  h += '&#10133; Pin Item</button>';
   h += '</div></div>';
 
-  // ── Add item form ──
-  h += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:20px">';
-  h += '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:10px">Pin a New Item</div>';
-  h += '<div style="display:grid;grid-template-columns:100px 1fr 120px auto auto;gap:8px;align-items:end">';
+  // Add item form (collapsible)
+  h += '<div id="addItemForm" style="display:none;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:14px">';
+  h += renderPinForm();
+  h += '</div>';
 
-  // Month selector
-  h += '<div><label style="font-size:10px;color:var(--muted);font-weight:600;display:block;margin-bottom:3px">Month</label>';
-  h += '<select id="ciMo" style="width:100%;padding:7px 8px;border:1px solid var(--b2);border-radius:7px;font-size:12px;font-family:inherit;outline:none;background:var(--surface);color:var(--t2)">';
-  h += '<option value="General">General</option>';
-  ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'].forEach(function(m){
-    h += '<option value="'+m+'">'+m+'</option>';
+  // Combine all items
+  var allItems = autoAlerts.map(function(a){ return Object.assign({},a,{isAuto:true, ckid:'auto_'+alertKey(a).replace(/[|\s]/g,'_')}); });
+  STATE.customItems.forEach(function(it){
+    allItems.push({mo:it.mo, cat:it.cat, txt:it.txt, sev:it.sev||'info', custom:true, id:it.id, isAuto:false, ckid:'pin_'+it.id, clickupUrl:it.clickupUrl, addedBy:it.addedBy, timestamp:it.timestamp});
   });
-  h += '</select></div>';
-
-  // Note input
-  h += '<div><label style="font-size:10px;color:var(--muted);font-weight:600;display:block;margin-bottom:3px">Note</label>';
-  h += '<input id="ciNote" type="text" placeholder="Describe what to investigate…" ';
-  h += 'style="width:100%;padding:7px 10px;border:1px solid var(--b2);border-radius:7px;font-size:12px;font-family:inherit;outline:none" ';
-  h += 'onkeydown="if(event.keyCode===13)addCustomItem()">';
-  h += '</div>';
-
-  // Category (optional)
-  h += '<div><label style="font-size:10px;color:var(--muted);font-weight:600;display:block;margin-bottom:3px">Category</label>';
-  h += '<input id="ciCat" type="text" placeholder="e.g. Marketing" ';
-  h += 'style="width:110px;padding:7px 10px;border:1px solid var(--b2);border-radius:7px;font-size:12px;font-family:inherit;outline:none">';
-  h += '</div>';
-
-  // Added by
-  h += '<div><label style="font-size:10px;color:var(--muted);font-weight:600;display:block;margin-bottom:3px">Added by</label>';
-  h += '<input id="ciBy" type="text" placeholder="Your name" ';
-  h += 'style="width:100%;padding:7px 10px;border:1px solid var(--b2);border-radius:7px;font-size:12px;font-family:inherit;outline:none">';
-  h += '</div>';
-
-  // Pin button
-  h += '<button onclick="addCustomItem()" style="padding:7px 16px;background:var(--blue);color:#fff;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap">';
-  h += '➕ Pin Item</button>';
-  h += '</div></div>';
-
-  // Combine and group all items
-  var allItems = autoAlerts.concat(STATE.customItems.map(function(it){
-    return {mo:it.mo, cat:it.cat, txt:it.txt, sev:it.sev||'info', custom:true, id:it.id};
-  }));
 
   if(allItems.length === 0){
-    h += '<div style="background:var(--green-l);border:1px solid var(--green-b);border-radius:10px;padding:20px 24px;font-size:13px;color:var(--green);font-weight:600">';
-    h += '✓ No items. Everything looks in line with projections.</div>';
+    h += '<div style="background:var(--green-l);border:1px solid var(--green-b);border-radius:10px;padding:20px 24px;font-size:13px;color:var(--green);font-weight:600">&#10003; No items. Everything looks on track.</div>';
     return h;
   }
 
@@ -1622,57 +1640,45 @@ function renderActionsPage(){
   catOrder.forEach(function(cat){
     var items=groups[cat]; if(!items||!items.length) return;
     var color=CAT_COLORS[cat]||'var(--purple)';
-
     h += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:14px">';
     h += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">';
     h += '<div style="width:10px;height:10px;border-radius:3px;background:'+color+';flex-shrink:0"></div>';
     h += '<span style="font-size:13px;font-weight:700;color:var(--text)">'+cat+'</span>';
     h += '<span style="font-size:11px;color:var(--muted);margin-left:2px">'+items.length+' item'+(items.length!==1?'s':'')+'</span>';
-    h += '</div>';
-    h += '<div style="display:flex;flex-direction:column;gap:6px">';
+    h += '</div><div style="display:flex;flex-direction:column;gap:6px">';
 
     items.forEach(function(a){
       var cfg=SEV[a.sev]||SEV.info;
-      var itemKey = a.custom ? null : alertKey(a);
+      var ckid = a.ckid;
+      var sent = a.clickupUrl ? true : false;
       h += '<div style="display:flex;gap:10px;align-items:flex-start;padding:10px 14px;background:'+cfg.bg+';border:1px solid '+cfg.bd+';border-radius:8px">';
+      // Checkbox
+      h += '<input type="checkbox" id="ck_'+ckid+'" '+(!sent?'':' disabled checked')+' style="margin-top:3px;width:14px;height:14px;cursor:pointer;flex-shrink:0;accent-color:var(--blue)">';
       h += '<span style="font-size:12px;flex-shrink:0;margin-top:2px;color:'+cfg.tc+'">'+cfg.icon+'</span>';
       h += '<div style="flex:1">';
       h += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:3px">';
       h += '<span style="font-size:11px;font-weight:700;color:'+cfg.tc+';text-transform:uppercase;letter-spacing:.06em">'+a.mo+(a.custom?' — Pinned':'')+'</span>';
       if(a.addedBy) h += '<span style="font-size:10px;color:var(--muted)">by '+a.addedBy+'</span>';
-      if(a.timestamp) h += '<span style="font-size:10px;color:var(--m2)">· '+new Date(a.timestamp).toLocaleDateString()+'</span>';
+      if(a.timestamp) h += '<span style="font-size:10px;color:var(--m2)">&middot; '+new Date(a.timestamp).toLocaleDateString()+'</span>';
+      if(sent) h += '<a href="'+a.clickupUrl+'" target="_blank" style="font-size:10px;color:var(--blue);text-decoration:none">&#128279; In ClickUp</a>';
       h += '</div>';
       h += '<div style="font-size:13px;color:var(--t2);line-height:1.5">'+a.txt+'</div>';
       h += '</div>';
+      // Dismiss/remove
       if(a.custom){
-        // Find the original pin to check clickupUrl
-        var origPin = STATE.customItems.find(function(p){ return p.id===a.id; });
-        h += '<div style="display:flex;flex-direction:column;gap:4px;align-self:flex-start;flex-shrink:0">';
-        if(origPin && origPin.clickupUrl){
-          h += '<a href="'+origPin.clickupUrl+'" target="_blank" style="font-size:10px;padding:3px 8px;border:1px solid var(--blue-b);border-radius:6px;background:var(--blue-l);color:var(--blue);text-decoration:none;white-space:nowrap">&#128279; ClickUp</a>';
-        } else {
-          h += '<button onclick="sendPinToClickUp('+a.id+')" style="font-size:10px;padding:3px 8px;border:1px solid var(--blue-b);border-radius:6px;background:var(--blue-l);color:var(--blue);cursor:pointer;white-space:nowrap">&#8594; ClickUp</button>';
-        }
-        h += '<button onclick="removeCustomItem('+a.id+')" title="Remove" ';
-        h += 'style="padding:2px 8px;border:1px solid var(--b2);border-radius:6px;background:var(--surface);color:var(--muted);font-size:13px;line-height:1;cursor:pointer">';
-        h += '×</button>';
-        h += '</div>';
+        h += '<button onclick="removeCustomItem('+a.id+')" title="Remove" style="padding:2px 8px;border:1px solid var(--b2);border-radius:6px;background:var(--surface);color:var(--muted);font-size:13px;cursor:pointer;flex-shrink:0;align-self:flex-start">&times;</button>';
       } else {
-        h += '<div style="display:flex;flex-direction:column;gap:4px;align-self:flex-start;flex-shrink:0">';
-        h += '<button onclick="sendAlertToClickUp(\"'+itemKey+'\",\"'+a.cat+'\",\"'+a.mo+'\")" style="font-size:10px;padding:3px 8px;border:1px solid var(--blue-b);border-radius:6px;background:var(--blue-l);color:var(--blue);cursor:pointer;white-space:nowrap">&#8594; ClickUp</button>';
-        h += '<button onclick="dismissAlert(\"'+itemKey+'\")" title="Dismiss" ';
-        h += 'style="padding:2px 8px;border:1px solid var(--b2);border-radius:6px;background:var(--surface);color:var(--muted);font-size:13px;line-height:1;cursor:pointer">';
-        h += '×</button>';
-        h += '</div>';
+        var ikey = alertKey(a);
+        h += '<button onclick="dismissAlert(\"'+ikey+'\")" title="Dismiss" style="padding:2px 8px;border:1px solid var(--b2);border-radius:6px;background:var(--surface);color:var(--muted);font-size:13px;cursor:pointer;flex-shrink:0;align-self:flex-start">&times;</button>';
       }
       h += '</div>';
     });
-
     h += '</div></div>';
   });
 
   return h;
 }
+
 
 
 

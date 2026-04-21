@@ -1589,6 +1589,51 @@ async function bulkSendToClickUp(){
   window.alert(sent+' item'+(sent!==1?'s':'')+' sent to ClickUp.'+(failed?' '+failed+' failed.':''));
 }
 
+function renderPinForm(){
+  var h = '';
+  h += '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">';
+  h += '<div style="display:flex;flex-direction:column;gap:4px">';
+  h += '<label style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)">Month</label>';
+  h += '<select id="ciMo" style="padding:7px 10px;background:var(--s2);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:12px;font-family:inherit">';
+  MONTHS.forEach(function(m,i){ h += '<option value="'+i+'">'+m+'</option>'; });
+  h += '</select></div>';
+  h += '<div style="display:flex;flex-direction:column;gap:4px;flex:1;min-width:200px">';
+  h += '<label style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)">Note</label>';
+  h += '<input id="ciNote" type="text" placeholder="Describe the action..." style="padding:7px 10px;background:var(--s2);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:12px;font-family:inherit;outline:none"/>';
+  h += '</div>';
+  h += '<div style="display:flex;flex-direction:column;gap:4px">';
+  h += '<label style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)">Category</label>';
+  h += '<select id="ciCat" style="padding:7px 10px;background:var(--s2);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:12px;font-family:inherit">';
+  ['Custom','Labor','Revenue','Marketing','Operations','Finance'].forEach(function(c){ h += '<option>'+c+'</option>'; });
+  h += '</select></div>';
+  h += '<div style="display:flex;flex-direction:column;gap:4px">';
+  h += '<label style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)">Added by</label>';
+  h += '<input id="ciBy" type="text" placeholder="Name" style="padding:7px 10px;background:var(--s2);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:12px;font-family:inherit;outline:none;width:120px"/>';
+  h += '</div>';
+  h += '<button onclick="saveCustomItem()" style="padding:8px 16px;background:var(--blue);color:#fff;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;align-self:flex-end">Add</button>';
+  h += '</div>';
+  return h;
+}
+
+function saveCustomItem(){
+  var note = document.getElementById('ciNote') ? document.getElementById('ciNote').value.trim() : '';
+  var cat  = document.getElementById('ciCat')  ? document.getElementById('ciCat').value.trim()  : 'Custom';
+  var mo   = document.getElementById('ciMo')   ? parseInt(document.getElementById('ciMo').value) : 0;
+  var by   = document.getElementById('ciBy')   ? document.getElementById('ciBy').value.trim()   : '';
+  if(!note) return;
+  var pin = {
+    id: Date.now(),
+    timestamp: new Date().toISOString(),
+    mo: MONTHS[mo], cat: cat,
+    txt: note, note: note, addedBy: by,
+    sev: 'info', custom: true
+  };
+  STATE.customItems.push(pin);
+  if(document.getElementById('ciNote')) document.getElementById('ciNote').value = '';
+  savePinsLocally();
+  render();
+}
+
 function renderActionsPage(){
   var autoAlerts = _origBuildAlerts();
   var ATH = D.act_thru;

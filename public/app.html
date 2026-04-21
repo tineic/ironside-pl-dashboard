@@ -1444,9 +1444,11 @@ async function syncFromSheet(){
 }
 
 async function pushPinToSheet(pin){
-  if(!pin || !pin.note) return;
-  var taskName = '[' + (pin.cat||'Action') + '] ' + (pin.mo_label||MONTHS[pin.month]||'') + (pin.mo_label||pin.month!=null?' - ':'') + pin.note;
-  var desc = 'Ironside P&L Dashboard action item.\nMonth: '+(pin.mo_label||MONTHS[pin.month]||'')+'\nCategory: '+(pin.cat||'')+'\nNote: '+pin.note+'\nAdded by: '+(pin.added_by||'');
+  var text = pin.note || pin.txt || pin.txt;
+  if(!pin || !text) return;
+  var month = pin.mo_label || (pin.month!=null ? MONTHS[pin.month] : '') || pin.mo || '';
+  var taskName = '[' + (pin.cat||'Action') + '] ' + (month ? month+' - ' : '') + text;
+  var desc = 'Ironside P&L Dashboard action item.\nMonth: '+month+'\nCategory: '+(pin.cat||'')+'\nNote: '+text+'\nAdded by: '+(pin.added_by||pin.addedBy||'');
   try{
     var r = await fetch('/api/clickup/task',{
       method:'POST',
@@ -1488,6 +1490,24 @@ function addCustomItem(){
   savePinsLocally();
   pushPinToSheet(pin);
   render();
+}
+
+async function sendAlertToClickUp(key, cat, mo){
+  var taskName = '[' + (cat||'Alert') + '] ' + (mo||'') + (mo?' - ':'') + 'Review required';
+  // Find the alert text from auto-alerts
+  var alerts = getAutoAlerts ? getAutoAlerts() : [];
+  var alert = alerts.find(function(a){ return alertKey(a)===key; });
+  var desc = alert ? alert.txt : 'Auto-detected alert from P&L Dashboard.\nMonth: '+(mo||'')+'\nCategory: '+(cat||'');
+  try{
+    var r = await fetch('/api/clickup/task',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({name:taskName, description:desc, priority:2})
+    });
+    var d = await r.json();
+    if(d.ok){ alert('Sent to ClickUp! Task: '+d.taskUrl); }
+    else { alert('ClickUp error: '+d.error); }
+  } catch(e){ alert('Failed: '+e.message); }
 }
 
 async function sendPinToClickUp(id){
@@ -1638,9 +1658,12 @@ function renderActionsPage(){
         h += '×</button>';
         h += '</div>';
       } else {
+        h += '<div style="display:flex;flex-direction:column;gap:4px;align-self:flex-start;flex-shrink:0">';
+        h += '<button onclick="sendAlertToClickUp(\"'+itemKey+'\",\"'+a.cat+'\",\"'+a.mo+'\")" style="font-size:10px;padding:3px 8px;border:1px solid var(--blue-b);border-radius:6px;background:var(--blue-l);color:var(--blue);cursor:pointer;white-space:nowrap">&#8594; ClickUp</button>';
         h += '<button onclick="dismissAlert(\"'+itemKey+'\")" title="Dismiss" ';
-        h += 'style="padding:2px 8px;border:1px solid var(--b2);border-radius:6px;background:var(--surface);color:var(--muted);font-size:13px;line-height:1;cursor:pointer;flex-shrink:0;align-self:flex-start">';
+        h += 'style="padding:2px 8px;border:1px solid var(--b2);border-radius:6px;background:var(--surface);color:var(--muted);font-size:13px;line-height:1;cursor:pointer">';
         h += '×</button>';
+        h += '</div>';
       }
       h += '</div>';
     });

@@ -455,6 +455,47 @@ var HRS_PER_MONTH = 38 * 52 / 12; // 164.67 hrs/mo
 var BASELINE_MONTHLY = 47000;      // pre-raise reference
 var CURRENT_MONTHLY  = 47653;      // post-raise actual
 
+// ── FLOOR CREW — minimum viable operation ─────────────────────────────────────
+// One person per dept at 30 hrs/week. Brett is salaried — always full 38 hrs.
+var FLOOR_CREW = ['Spencer','Riley','Juan','Mike','Sterling','Brett'];
+var FLOOR_HRS  = 30;
+
+function getFloorMonthlyCost(){
+  return STAFF.reduce(function(sum, p){
+    if(FLOOR_CREW.indexOf(p.name) < 0) return sum;
+    var hrs = p.salaried ? 38 : FLOOR_HRS;
+    return sum + (p.base * STAFF_MULTIPLIER) * (hrs * 52 / 12);
+  }, 0);
+}
+
+function getRosterMonthlyCost(){
+  return STAFF.reduce(function(sum, p){
+    if(!p.active) return sum;
+    var hrs = p.hrsPerWeek !== undefined ? p.hrsPerWeek : p.hrs || 38;
+    return sum + (p.base * STAFF_MULTIPLIER) * (hrs * 52 / 12);
+  }, 0);
+}
+
+// Get labor cost for a specific month including staffing changes
+function getLaborForMonth(monthIdx){
+  var base = getRosterMonthlyCost();
+  // Apply layoffs
+  var layoffDelta = (STATE.staffingChanges || []).reduce(function(sum, ch){
+    if(ch.status === 'removed') return sum;
+    if(ch.type !== 'layoff') return sum;
+    if(monthIdx < ch.startMonth) return sum;
+    return sum + ch.monthlyDelta;
+  }, 0);
+  // Apply hour reductions
+  var hourDelta = (STATE.staffingChanges || []).reduce(function(sum, ch){
+    if(ch.status === 'removed') return sum;
+    if(ch.type !== 'hours') return sum;
+    if(monthIdx < ch.startMonth || monthIdx > ch.endMonth) return sum;
+    return sum + ch.monthlyDelta;
+  }, 0);
+  return base + layoffDelta + hourDelta;
+}
+
 var STAFF = [
   {name:'Spencer',  dept:'CS',          base:25.00,  salaried:false, builder:false, raised:false},
   {name:'Danni',    dept:'CS',          base:20.00,  salaried:false, builder:false, raised:false},
@@ -583,6 +624,11 @@ function getLaborRow121(i){
   var ov = STATE.laborOverrides[i];
   if(ov && ov.row121 !== null && ov.row121 !== undefined) return ov.row121;
   return D.labor_row121[i];
+}
+
+function getLaborBase(i){
+  // Pure projection sheet values — no overrides, no adjustments
+  return (D.labor_row118[i]||0) + (D.labor_row119[i]||0) + (D.labor_row120[i]||0) + (D.labor_row121[i]||0);
 }
 
 function getTotalLabor(i){
@@ -2058,549 +2104,336 @@ function onCalcSlider(){
 // ── LABOR MODEL PAGE ─────────────────────────────────────────────────────────
 function renderLaborPage(){
   var h = '';
+  var floorCost   = getFloorMonthlyCost();
+  var rosterCost  = getRosterMonthlyCost();
+  var aboveFloor  = rosterCost - floorCost;
 
-  // Header
-  h += '<div style="margin-bottom:20px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">';
+  // ── PAGE HEADER ──────────────────────────────────────────────────────────
+  h += '<div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:20px">';
   h += '<div>';
-  h += '<h2 style="font-size:20px;letter-spacing:-.02em;margin-bottom:4px">Labor Model</h2>';
-  h += '<p style="font-size:12px;color:var(--muted)">Builder time: 1.5 hrs/PC &nbsp;&middot;&nbsp; 17.6% threshold (all 4 rows) &nbsp;&middot;&nbsp; Click any month row to adjust</p>';
+  h += '<h2 style="font-size:20px;letter-spacing:-.02em;margin-bottom:3px">Labor Model</h2>';
+  h += '<p style="font-size:12px;color:var(--muted)">Floor = minimum viable operation (6 staff, 30 hrs) &nbsp;&middot;&nbsp; All changes stack on top of current roster cost</p>';
   h += '</div>';
   h += '<div style="display:flex;gap:8px;flex-wrap:wrap">';
-  h += '<button onclick="toggleSection(&quot;rosterSection&quot;)" id="rosterBtn" ';
-  h += 'style="padding:7px 14px;border:1px solid var(--b2);border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;background:var(--surface);color:var(--muted)">&#9776; Staff Roster &amp; Headcount</button>';
-  h += '<button onclick="toggleSection(&quot;calcSection&quot;)" id="calcBtn" ';
-  h += 'style="padding:7px 14px;border:1px solid var(--b2);border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;background:var(--surface);color:var(--muted)">&#128203; Per-PC Calculator</button>';
-  // Show reset if any labor overrides are active
-  var hasOverrides = Object.keys(STATE.laborOverrides).length > 0 && Object.keys(STATE.laborOverrides).some(function(k){ var ov=STATE.laborOverrides[k]; return ov&&(ov.other!=null||ov.prodHrsDelta!=null||ov.contractors!=null); });
-  if(hasOverrides){
-    h += '<span style="font-size:11px;font-weight:700;color:var(--blue);padding:4px 10px;background:var(--blue-l);border:1px solid var(--blue-b);border-radius:16px">• Labor adjustments active</span>';
-    h += '<button onclick="resetLaborOverrides()" style="padding:7px 12px;background:var(--surface);color:var(--muted);border:1px solid var(--b2);border-radius:8px;font-size:12px;font-weight:600;cursor:pointer">↺ Reset to baseline</button>';
-  }
-  h += '</div></div>';
+  h += '<button onclick="toggleSection(&quot;rosterSection&quot;)" id="rosterBtn" style="padding:7px 14px;border:1px solid '+(STATE.panelOpen&&STATE.panelOpen['rosterSection']?'var(--blue);':'var(--b2);')+'border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;background:'+(STATE.panelOpen&&STATE.panelOpen['rosterSection']?'var(--blue-l)':'var(--surface)')+';color:'+(STATE.panelOpen&&STATE.panelOpen['rosterSection']?'var(--blue)':'var(--muted)')+'">&#9776; Staff Roster</button>';
+  h += '</div>';
+  h += '</div>';
 
-  // ── Collapsible: Staff Roster ──
-  h += '<div id="rosterSection" style="display:'+(STATE.panelOpen['rosterSection']?'block':'none')+';margin-bottom:16px">';
+  // ── COLLAPSIBLE ROSTER ───────────────────────────────────────────────────
+  h += '<div id="rosterSection" style="display:'+(STATE.panelOpen&&STATE.panelOpen['rosterSection']?'block':'none')+';margin-bottom:16px">';
   h += renderStaffRoster();
   h += '</div>';
 
-  // ── Collapsible: PC Calculator ──
-  h += '<div id="calcSection" style="display:'+(STATE.panelOpen['calcSection']?'block':'none')+';margin-bottom:16px">';
-  h += renderPCCalc();
+  // ── SUMMARY CARDS ────────────────────────────────────────────────────────
+  h += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px">';
+  // Current roster cost
+  h += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px">';
+  h += '<div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:6px">Current Roster Cost</div>';
+  h += '<div style="font-size:24px;font-weight:700;color:var(--text)">'+fmt(rosterCost)+'/mo</div>';
+  h += '<div style="font-size:10px;color:var(--muted);margin-top:4px">All active staff at current hours</div>';
+  h += '</div>';
+  // Floor cost
+  h += '<div style="background:var(--surface);border:1px solid var(--blue-b);border-radius:10px;padding:16px">';
+  h += '<div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:6px">Floor Cost</div>';
+  h += '<div style="font-size:24px;font-weight:700;color:var(--blue)">'+fmt(floorCost)+'/mo</div>';
+  h += '<div style="font-size:10px;color:var(--muted);margin-top:4px">Spencer, Riley, Juan, Mike, Sterling, Brett &mdash; 30 hrs min</div>';
+  h += '</div>';
+  // Above floor
+  h += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px">';
+  h += '<div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:6px">Above Floor</div>';
+  h += '<div style="font-size:24px;font-weight:700;color:'+(aboveFloor>15000?'var(--red)':aboveFloor>8000?'var(--orange)':'var(--green)')+'">'+fmt(aboveFloor)+'/mo</div>';
+  h += '<div style="font-size:10px;color:var(--muted);margin-top:4px">'+fmtPct(aboveFloor/rosterCost)+' above minimum viable</div>';
+  h += '</div>';
   h += '</div>';
 
-  // ── Section divider ──
-  h += '<div style="margin:16px 0 16px;display:flex;align-items:center;gap:12px">';
-  h += '<span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)">Monthly Scenario Model (Apr–Dec)</span>';
-  h += '<div style="flex:1;height:1px;background:var(--border)"></div></div>';
+  // ── FLOOR MODEL: DEPT TABLE ──────────────────────────────────────────────
+  h += '<div class="card" style="margin-bottom:16px">';
+  h += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">';
+  h += '<div class="card-title" style="margin-bottom:0">Floor Cost Calculator — Dept Capacity at Volume</div>';
+  h += '</div>';
 
-  // Summary table
-  h += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:20px">';
-  h += '<table style="width:100%;border-collapse:collapse;font-size:12px">';
-  h += '<thead><tr style="background:var(--s2);border-bottom:1px solid var(--border)">';
-  var thStyle = 'padding:8px 12px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);white-space:nowrap';
-  var thR = thStyle+';text-align:right';
-  var thL = thStyle+';text-align:left';
-  ['Month','Units','Hrs Needed','Hrs Planned','Salaried','Contractors','Projects','Total','% Rev','vs 17.6%',''].forEach(function(c,ci){
-    h += '<th style="'+(ci===0?thL:thR)+'">'+c+'</th>';
+  // Volume slider
+  h += '<div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap">';
+  h += '<span style="font-size:12px;color:var(--t2);font-weight:600">Daily builds:</span>';
+  h += '<input type="range" min="5" max="80" step="1" value="'+CALC_STATE.dailyUnits+'" id="floorUnits" oninput="onFloorUnits()" style="width:200px;accent-color:var(--blue)">';
+  h += '<span style="font-size:13px;font-weight:700;color:var(--text)" id="floorUnitsLbl">'+CALC_STATE.dailyUnits+' units/day</span>';
+  h += '<span style="font-size:11px;color:var(--muted)">(based on revenue scenario)</span>';
+  h += '</div>';
+
+  var units = CALC_STATE.dailyUnits;
+  var detP  = CALC_STATE.detailingPct / 100;
+  var depts = [
+    {name:'Building',  cap:5.5,  demand:units,         people:['Mike'],                    color:'#8b5cf6'},
+    {name:'Detailing', cap:10,   demand:units*detP,    people:['Juan','Brandon'],           color:'#f59e0b'},
+    {name:'Inventory', cap:40,   demand:units,         people:['Riley'],                    color:'#10b981'},
+    {name:'Testing',   cap:45,   demand:units,         people:['Shawn','Brett'],            color:'#06b6d4'},
+    {name:'Shipping',  cap:25,   demand:units,         people:['Sterling'],                 color:'#ec4899'},
+    {name:'CS',        cap:12,   demand:units,         people:['Spencer','Danni'],          color:'#3b82f6'},
+  ];
+
+  h += '<div style="background:var(--s2);border:1px solid var(--border);border-radius:8px;overflow:hidden">';
+  h += '<div style="display:grid;grid-template-columns:110px 90px 90px 90px 90px 100px 1fr;background:var(--surface2)">';
+  ['Dept','Cap/person','Demand','You have','Need','Surplus','Monthly cost'].forEach(function(c,i){
+    h += '<div style="padding:7px 10px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);text-align:'+(i===0?'left':'right')+'">'+c+'</div>';
   });
+  h += '</div>';
+
+  depts.forEach(function(dept){
+    var activeMembers = STAFF.filter(function(p){ return p.active !== false && dept.people.indexOf(p.name) >= 0; });
+    var headcount = activeMembers.length;
+    var capacity  = headcount * dept.cap;
+    var needed    = Math.ceil(dept.demand / dept.cap);
+    var surplus   = capacity - dept.demand;
+    var monthly   = activeMembers.reduce(function(s,p){
+      var hrs = p.hrsPerWeek !== undefined ? p.hrsPerWeek : p.hrs || 38;
+      return s + (p.base * STAFF_MULTIPLIER) * (hrs*52/12);
+    }, 0);
+    var surplusClr = surplus < 0 ? 'color:var(--red);font-weight:700' : surplus < dept.cap ? 'color:var(--green)' : 'color:var(--amber)';
+    var surplusTxt = (surplus >= 0 ? '+' : '')+surplus.toFixed(1)+' /day';
+
+    // Floor indicator
+    var isFloorPerson = dept.people.some(function(n){ return FLOOR_CREW.indexOf(n) >= 0; });
+    var floorMember = FLOOR_CREW.filter(function(n){ return dept.people.indexOf(n) >= 0; })[0];
+
+    h += '<div style="display:grid;grid-template-columns:110px 90px 90px 90px 90px 100px 1fr;border-top:1px solid var(--border);align-items:center">';
+    h += '<div style="padding:8px 10px;display:flex;align-items:center;gap:5px">';
+    h += '<span style="width:6px;height:6px;border-radius:2px;background:'+dept.color+';flex-shrink:0"></span>';
+    h += '<span style="font-weight:600;font-size:12px">'+dept.name+'</span></div>';
+    h += '<div style="padding:8px 10px;text-align:right;color:var(--muted);font-size:11px">'+dept.cap+'/day</div>';
+    h += '<div style="padding:8px 10px;text-align:right;font-size:11px;color:var(--t2)">'+dept.demand.toFixed(0)+'/day</div>';
+    h += '<div style="padding:8px 10px;text-align:right;font-weight:600">'+headcount+' ('+(activeMembers.map(function(p){return p.name;}).join(', '))+')</div>';
+    h += '<div style="padding:8px 10px;text-align:right;font-size:11px;color:'+(needed>headcount?'var(--red)':' var(--green)')+'">'+needed+'</div>';
+    h += '<div style="padding:8px 10px;text-align:right;font-size:11px;'+surplusClr+'">'+surplusTxt+'</div>';
+    h += '<div style="padding:8px 10px;text-align:right;font-weight:600">'+fmt(monthly)+'/mo</div>';
+    h += '</div>';
+  });
+
+  // Total
+  h += '<div style="display:grid;grid-template-columns:110px 90px 90px 90px 90px 100px 1fr;background:var(--s2);border-top:2px solid var(--border2)">';
+  h += '<div style="padding:8px 10px;font-weight:700;color:var(--text)">Total</div>';
+  h += '<div></div><div></div><div></div><div></div><div></div>';
+  h += '<div style="padding:8px 10px;text-align:right;font-weight:700;color:var(--text)">'+fmt(rosterCost)+'/mo</div>';
+  h += '</div>';
+  h += '</div>'; // end dept table
+  h += '</div>'; // end card
+
+  // ── FLOOR vs CURRENT vs SCENARIO ─────────────────────────────────────────
+  h += '<div class="card" style="margin-bottom:16px">';
+  h += '<div class="card-title">Projection vs Current Roster vs Floor — Apr–Dec</div>';
+  h += '<div style="overflow-x:auto"><table class="tbl" style="font-size:11px"><thead><tr>';
+  h += '<th style="text-align:left;width:110px">Line</th>';
+  for(var i=3;i<12;i++) h += '<th>'+MONTHS[i]+'</th>';
   h += '</tr></thead><tbody>';
 
-  for(var i=3; i<=11; i++){
-    var ns       = getNS(i);
-    var r118     = getLaborRow118(i);
-    var r119     = getLaborRow119(i);
-    var r120     = getLaborRow120(i);
-    var r121     = getLaborRow121(i);
-    var total    = r118+r119+r120+r121;
-    var pct      = ns>0 ? total/ns*100 : 0;
-    var f        = getFactor(i);
-    var scenUnits= Math.round(D.units_2025[i]*f);
-    var prodLabor= scenUnits*HOURS_PER_BUILD*HOURLY_RATE;
-    var salFloor = D.salaried_floor[i];
-    var ov       = STATE.laborOverrides[i]||{};
-    var hasOv    = ov.prodHrsDelta!=null||ov.contractors!=null||ov.other!=null;
-
-    var status = pct<=16?'ok':(pct<=17.6?'near':'over');
-    var statusStyle = {
-      ok:   'color:var(--green)',
-      near: 'color:var(--orange)',
-      over: 'color:var(--red);font-weight:700'
-    }[status];
-    var barW   = Math.min(100, pct/17.6*100).toFixed(1);
-    var barClr = status==='ok'?'var(--green)':(status==='near'?'var(--orange)':'var(--red)');
-    var rowBg  = status==='over'?'background:var(--red-l)':''+(hasOv?';background:var(--blue-l)':'');
-
-    // Main row — proper <tr><td> for alignment
-    var panelId = 'lbPanel'+i;
-    var hrsNeeded  = Math.round(scenUnits * 1.5); // 1.5 hrs = builder's actual build time per PC
-    var r118Base   = D.labor_row118[i];
-    var hrsPlanned = Math.round((r118Base - D.salaried_floor[i]) / getHourlyRate());
-    var hrsDiff    = hrsNeeded - hrsPlanned; // positive = understaffed, negative = overstaffed
-    var diff = pct - 17.6;
-    var td = 'padding:10px 12px;vertical-align:middle;border-bottom:1px solid var(--border)';
-    var tdR = td+';text-align:right';
-
-    h += '<tr style="'+(rowBg?rowBg:'')+';cursor:pointer" onclick="toggleLaborExpand('+i+')">';
-    h += '<td style="'+td+';font-size:13px;font-weight:700;color:var(--text)">'+MONTHS[i]+'</td>';
-    h += '<td style="'+tdR+';font-size:12px;color:var(--t2)">'+scenUnits+'</td>';
-    // Hours needed
-    h += '<td style="'+tdR+'">';
-    h += '<div style="font-size:12px;font-weight:600;color:var(--t2)">'+hrsNeeded+'</div>';
-    h += '<div style="font-size:9px;color:var(--m2)">'+scenUnits+' × 4</div>';
-    h += '</td>';
-    // Hours planned
-    h += '<td style="'+tdR+'">';
-    h += '<div style="font-size:12px;font-weight:600;color:'+(hrsDiff>0?'var(--orange)':(hrsDiff<0?'var(--muted)':'var(--green)'))+'">'+(hrsPlanned>0?hrsPlanned:'—')+'</div>';
-    var hrsLabel = hrsDiff===0?'on target':hrsDiff>0?'↑ '+hrsDiff+' short':'↓ '+Math.abs(hrsDiff)+' extra';
-    h += '<div style="font-size:9px;color:'+(hrsDiff>0?'var(--orange)':hrsDiff<0?'var(--green)':'var(--m2)')+'">'+hrsLabel+'</div>';
-    h += '</td>';
-    h += '<td style="'+tdR+'">';
-    h += '<div style="font-size:12px;color:var(--t2)">'+fmt(salFloor,true)+'</div>';
-    h += '<div style="font-size:9px;color:var(--m2)">+'+fmt(prodLabor,true)+' prod</div>';
-    h += '</td>';
-    h += '<td style="'+tdR+';font-size:12px;color:var(--t2)">'+fmt(r119+r120,true)+(hasOv&&ov.contractors!=null?'<div style="font-size:9px;color:var(--blue)">overridden</div>':'')+'</td>';
-    h += '<td style="'+tdR+';font-size:12px;color:'+(r121>0?'var(--purple)':'var(--m2)')+'">'+fmt(r121,true)+'</td>';
-    h += '<td style="'+tdR+';font-size:13px;font-weight:600;color:var(--text)">'+fmt(total,true)+'</td>';
-    h += '<td style="'+tdR+';font-size:13px;font-weight:700;'+statusStyle+'">'+pct.toFixed(1)+'%</td>';
-    h += '<td style="'+tdR+'">';
-    h += '<span style="font-size:11px;font-weight:700;padding:2px 7px;border-radius:10px;'+(diff>0?'background:var(--red-l);color:var(--red)':'background:var(--green-l);color:var(--green)')+'">';
-    h += (diff>0?'+':'')+diff.toFixed(1)+'%</span>';
-    h += '</td>';
-    h += '<td style="'+tdR+';font-size:11px;color:var(--muted)">'+(status==='over'?'⚠':'▼')+'</td>';
-    h += '</tr>';
-
-    // Progress bar row
-    h += '<tr style="border-bottom:1px solid var(--border)"><td colspan="11" style="padding:0 0 1px">';
-    h += '<div style="height:3px;background:var(--s3)">';
-    h += '<div style="height:100%;width:'+barW+'%;background:'+barClr+';border-radius:2px"></div>';
-    h += '</div></td></tr>';
-
-    // Expandable override panel row
-    h += '<tr id="'+panelId+'" style="display:none"><td colspan="11" style="padding:16px;border-bottom:2px solid var(--blue-b);background:#fff">';
-
-    // Three levers in a clean row
-    h += '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:14px">';
-
-    // Lever 1: Production hours
-    var prodDelta = ov.prodHrsDelta||0;
-    var prodImpact = prodDelta * HOURLY_RATE;
-    h += '<div style="background:var(--s2);border-radius:9px;padding:14px">';
-    h += '<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">';
-    h += '<div style="width:8px;height:8px;border-radius:2px;background:#3b82f6"></div>';
-    h += '<span style="font-size:11px;font-weight:700;color:var(--t2)">Production Hours</span></div>';
-    h += '<div style="font-size:10px;color:var(--muted);margin-bottom:8px">Needed: '+hrsNeeded+' hrs &nbsp;·&nbsp; Planned: '+(hrsPlanned>0?hrsPlanned:0)+' hrs &nbsp;·&nbsp; $'+HOURLY_RATE+'/hr</div>';
-    h += '<label style="font-size:10px;font-weight:600;color:var(--muted);display:block;margin-bottom:4px">Hours to add / cut (neg = cut)</label>';
-    h += '<input type="number" id="ovProd'+i+'" value="'+(ov.prodHrsDelta!=null?ov.prodHrsDelta:'')+'" placeholder="e.g. -80" ';
-    h += 'style="width:100%;padding:7px 10px;border:1px solid var(--b2);border-radius:7px;font-size:13px;font-weight:600;outline:none;background:#fff">';
-    h += '<div style="font-size:11px;margin-top:6px;font-weight:600;color:'+(prodImpact<0?'var(--green)':'var(--blue)')+'">'+
-      (prodDelta!==0?(prodImpact<0?'Saves ':'Adds ')+fmt(Math.abs(prodImpact),true)+' ('+Math.abs(prodDelta)+' hrs)':'No change yet')+'</div>';
-    h += '</div>';
-
-    // Lever 2: Contractors
-    h += '<div style="background:var(--s2);border-radius:9px;padding:14px">';
-    h += '<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">';
-    h += '<div style="width:8px;height:8px;border-radius:2px;background:#f59e0b"></div>';
-    h += '<span style="font-size:11px;font-weight:700;color:var(--t2)">Contractors Budget</span></div>';
-    h += '<div style="font-size:10px;color:var(--muted);margin-bottom:8px">Projected: '+fmt(r119+r120,true)+'</div>';
-    h += '<label style="font-size:10px;font-weight:600;color:var(--muted);display:block;margin-bottom:4px">New total budget ($)</label>';
-    h += '<input type="number" id="ovCtr'+i+'" value="'+(ov.contractors!=null?Math.round(ov.contractors):'')+'" placeholder="'+Math.round(r119+r120)+'" ';
-    h += 'style="width:100%;padding:7px 10px;border:1px solid var(--b2);border-radius:7px;font-size:13px;font-weight:600;outline:none;background:#fff">';
-    var ctrDiff = ov.contractors!=null ? (ov.contractors - (r119+r120)) : 0;
-    h += '<div style="font-size:11px;margin-top:6px;font-weight:600;color:'+(ctrDiff<0?'var(--green)':ctrDiff>0?'var(--red)':'var(--muted)')+'">'+
-      (ov.contractors!=null?(ctrDiff<0?'Saves ':'Over projection by ')+fmt(Math.abs(ctrDiff),true):'No change yet')+'</div>';
-    h += '</div>';
-
-    // Lever 3: Other
-    h += '<div style="background:var(--s2);border-radius:9px;padding:14px">';
-    h += '<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">';
-    h += '<div style="width:8px;height:8px;border-radius:2px;background:#8b5cf6"></div>';
-    h += '<span style="font-size:11px;font-weight:700;color:var(--t2)">Other Adjustment</span></div>';
-    h += '<div style="font-size:10px;color:var(--muted);margin-bottom:8px">Salary cuts, bonuses, one-time changes</div>';
-    h += '<label style="font-size:10px;font-weight:600;color:var(--muted);display:block;margin-bottom:4px">Amount (neg = savings)</label>';
-    h += '<input type="number" id="ovOther'+i+'" value="'+(ov.other!=null?ov.other:'')+'" placeholder="e.g. -5000" ';
-    h += 'style="width:100%;padding:7px 10px;border:1px solid var(--b2);border-radius:7px;font-size:13px;font-weight:600;outline:none;background:#fff">';
-    h += '<input type="text" id="ovOtherNote'+i+'" value="'+(ov.otherNote||'')+'" placeholder="Describe the change…" ';
-    h += 'style="width:100%;margin-top:6px;padding:7px 10px;border:1px solid var(--b2);border-radius:7px;font-size:11px;outline:none;background:#fff">';
-    h += '</div>';
-
-    h += '</div>'; // end grid
-
-    // What this does to the total
-    h += '<div style="background:var(--blue-l);border:1px solid var(--blue-b);border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:12px;display:flex;align-items:center;gap:16px">';
-    h += '<span style="color:var(--muted)">With these changes:</span>';
-    h += '<span style="font-weight:700;color:var(--text)">'+fmt(total,true)+' total labor</span>';
-    h += '<span style="font-weight:700;'+statusStyle+'">'+pct.toFixed(1)+'% of revenue</span>';
-    if(status==='over') h += '<span style="color:var(--red)">Still over by '+fmt(total - ns*LABOR_THRESHOLD,true)+'</span>';
-    else h += '<span style="color:var(--green)">✓ Within threshold</span>';
-    h += '</div>';
-
-    // Buttons
-    h += '<div style="display:flex;gap:8px">';
-    h += '<button onclick="applyLaborOverride('+i+')" ';
-    h += 'style="padding:8px 20px;background:var(--blue);color:#fff;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer">Apply Changes</button>';
-    h += '<button onclick="pinLaborOverride('+i+')" ';
-    h += 'style="padding:8px 16px;background:var(--surface);color:var(--blue);border:1px solid var(--blue);border-radius:7px;font-size:12px;font-weight:700;cursor:pointer">➕ Pin to Action Items</button>';
-    if(hasOv){
-      h += '<button onclick="clearLaborOverride('+i+')" ';
-      h += 'style="padding:8px 14px;background:var(--surface);color:var(--muted);border:1px solid var(--border);border-radius:7px;font-size:12px;font-weight:600;cursor:pointer">Clear</button>';
+  var scenRows2 = [
+    {label:'Projection sheet', fn:function(i){ return getLaborBase(i); }, style:'color:var(--t2)'},
+    {label:'Current roster',   fn:function(i){ return rosterCost; },       style:'color:var(--text);font-weight:600'},
+    {label:'Floor cost',       fn:function(i){ return floorCost; },         style:'color:var(--blue);font-weight:600'},
+    {label:'Delta (roster−proj)', fn:function(i){ return rosterCost - getLaborBase(i); }, style:'', delta:true},
+  ];
+  scenRows2.forEach(function(row){
+    h += '<tr><td style="'+row.style+'">'+row.label+'</td>';
+    for(var i=3;i<12;i++){
+      var v = row.fn(i);
+      var clr = row.delta ? (v>0?'color:var(--red)':v<0?'color:var(--green)':'') : row.style;
+      h += '<td style="'+clr+'">'+fmt(v)+'</td>';
     }
-    h += '</div>';
+    h += '</tr>';
+  });
+  h += '</tbody></table></div>';
+  h += '</div>'; // end card
 
-    h += '</td></tr>'; // end panel row
-  }
-  h += '</tbody></table></div>'; // end table
+  // ── STAFFING CHANGES: LAYOFFS ─────────────────────────────────────────────
+  h += renderLayoffsPanel();
 
-  // Nov/Dec note
-  h += '<div style="background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:14px 16px;font-size:12px;color:var(--muted);margin-bottom:24px">';
-  h += '<strong style="color:var(--t2)">Nov &amp; Dec</strong> — Projection already accounts for seasonal hires at full hours and Dec bonuses. Adjustable above if plans change.';
-  h += '</div>';
-
-
+  // ── STAFFING CHANGES: HOUR REDUCTIONS ────────────────────────────────────
+  h += renderHourReductionsPanel();
 
   return h;
 }
 
-// ── EMPLOYEE UTILIZATION TOOL ────────────────────────────────────────────────
-
-
-
-//   roles: [ {name, headcount, rate, hoursPerBuild, category}, ... ]
-
-// }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+function onFloorUnits(){
+  var val = parseInt(document.getElementById('floorUnits').value, 10);
+  CALC_STATE.dailyUnits = val;
+  var lbl = document.getElementById('floorUnitsLbl');
+  if(lbl) lbl.textContent = val + ' units/day';
+  // Re-render just the labor page content
+  var el = document.getElementById('mainContent');
+  if(el) el.innerHTML = renderLaborPage();
+  else render();
+}
+
+function renderLayoffsPanel(){
+  var layoffs = (STATE.staffingChanges||[]).filter(function(c){ return c.type==='layoff' && c.status!=='removed'; });
+  var h = '<div class="card" style="margin-bottom:16px">';
+  h += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">';
+  h += '<div class="card-title" style="margin-bottom:0">Layoffs <span style="font-size:10px;color:var(--muted);font-weight:400">(permanent from start month onward)</span></div>';
+  h += '<button onclick="openAddLayoff()" style="padding:6px 12px;background:var(--red-l);color:var(--red);border:1px solid var(--red-b);border-radius:7px;font-size:11px;font-weight:700;cursor:pointer">+ Add Layoff</button>';
+  h += '</div>';
+
+  // Add form
+  h += '<div id="addLayoffForm" style="display:none;background:var(--s2);border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:12px">';
+  h += '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">';
+  h += '<div style="display:flex;flex-direction:column;gap:4px"><label style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)">Person</label>';
+  h += '<select id="lyPerson" style="padding:6px 10px;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;font-family:inherit">';
+  STAFF.forEach(function(p){ if(p.active!==false) h += '<option value="'+p.id+'">'+p.name+' ('+p.dept+')</option>'; });
+  h += '</select></div>';
+  h += '<div style="display:flex;flex-direction:column;gap:4px"><label style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)">From month</label>';
+  h += '<select id="lyStart" style="padding:6px 10px;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;font-family:inherit">';
+  ['Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'].forEach(function(m,i){ h += '<option value="'+(i+3)+'">'+m+'</option>'; });
+  h += '</select></div>';
+  h += '<button onclick="addLayoff()" style="padding:7px 14px;background:var(--red);color:#fff;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer">Add</button>';
+  h += '<button onclick="document.getElementById(&quot;addLayoffForm&quot;).style.display=&quot;none&quot;" style="padding:7px 12px;background:var(--surface);color:var(--muted);border:1px solid var(--border);border-radius:7px;font-size:12px;cursor:pointer">Cancel</button>';
+  h += '</div></div>';
+
+  if(!layoffs.length){
+    h += '<div style="text-align:center;padding:20px;color:var(--muted);font-size:12px">No layoffs modeled.</div>';
+  } else {
+    h += '<table class="tbl" style="font-size:12px"><thead><tr>';
+    h += '<th style="text-align:left">Person</th><th>From</th><th>Monthly savings</th><th>Months affected</th><th>Status</th><th></th>';
+    h += '</tr></thead><tbody>';
+    layoffs.forEach(function(ch, idx){
+      var savings = Math.abs(ch.monthlyDelta);
+      var monthsAffected = 12 - ch.startMonth;
+      var totalSavings = savings * monthsAffected;
+      h += '<tr>';
+      h += '<td style="font-weight:600">'+ch.personName+'</td>';
+      h += '<td>'+MONTHS[ch.startMonth]+' onward</td>';
+      h += '<td style="color:var(--green);font-weight:700">'+fmt(savings)+'/mo</td>';
+      h += '<td style="color:var(--muted)">'+monthsAffected+' months ('+fmt(totalSavings)+' total)</td>';
+      var statusClr = ch.clickupUrl ? 'color:var(--blue)' : 'color:var(--muted)';
+      h += '<td style="'+statusClr+'">'+(ch.clickupUrl?'<a href="'+ch.clickupUrl+'" target="_blank" style="color:var(--blue);text-decoration:none">In ClickUp</a>':'Draft')+'</td>';
+      h += '<td style="display:flex;gap:6px">';
+      if(!ch.clickupUrl) h += '<button onclick="sendChangeToClickUp('+idx+',"layoff")" style="font-size:10px;padding:3px 8px;border:1px solid var(--blue-b);background:var(--blue-l);color:var(--blue);border-radius:5px;cursor:pointer">&#8594; ClickUp</button>';
+      h += '<button onclick="removeChange('+idx+')" style="font-size:10px;padding:3px 8px;border:1px solid var(--b2);background:var(--surface);color:var(--red);border-radius:5px;cursor:pointer">&times;</button>';
+      h += '</td></tr>';
+    });
+    h += '</tbody></table>';
+    // Total impact
+    var totalLayoffSavings = layoffs.reduce(function(s,ch){ return s + Math.abs(ch.monthlyDelta); }, 0);
+    h += '<div style="margin-top:10px;padding:10px 12px;background:var(--green-l);border:1px solid var(--green-b);border-radius:7px;font-size:12px;color:var(--green);font-weight:600">';
+    h += 'Total monthly savings from layoffs: '+fmt(totalLayoffSavings)+'/mo</div>';
+  }
+  h += '</div>';
+  return h;
+}
+
+function renderHourReductionsPanel(){
+  var reductions = (STATE.staffingChanges||[]).filter(function(c){ return c.type==='hours' && c.status!=='removed'; });
+  var h = '<div class="card" style="margin-bottom:16px">';
+  h += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">';
+  h += '<div class="card-title" style="margin-bottom:0">Hour Reductions <span style="font-size:10px;color:var(--muted);font-weight:400">(temporary, specific months)</span></div>';
+  h += '<button onclick="openAddHours()" style="padding:6px 12px;background:var(--orange-l);color:var(--orange);border:1px solid var(--orange-b);border-radius:7px;font-size:11px;font-weight:700;cursor:pointer">+ Add Reduction</button>';
+  h += '</div>';
+
+  // Add form
+  h += '<div id="addHoursForm" style="display:none;background:var(--s2);border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:12px">';
+  h += '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">';
+  h += '<div style="display:flex;flex-direction:column;gap:4px"><label style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)">Person</label>';
+  h += '<select id="hrPerson" style="padding:6px 10px;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;font-family:inherit">';
+  STAFF.forEach(function(p){ if(p.active!==false) h += '<option value="'+p.id+'">'+p.name+' ('+p.dept+')</option>'; });
+  h += '</select></div>';
+  h += '<div style="display:flex;flex-direction:column;gap:4px"><label style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)">From</label>';
+  h += '<select id="hrStart" style="padding:6px 10px;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;font-family:inherit">';
+  ['Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'].forEach(function(m,i){ h += '<option value="'+(i+3)+'">'+m+'</option>'; });
+  h += '</select></div>';
+  h += '<div style="display:flex;flex-direction:column;gap:4px"><label style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)">To</label>';
+  h += '<select id="hrEnd" style="padding:6px 10px;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;font-family:inherit">';
+  ['Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'].forEach(function(m,i){ h += '<option value="'+(i+3)+'" '+(i===8?'selected':'')+'>'+m+'</option>'; });
+  h += '</select></div>';
+  h += '<div style="display:flex;flex-direction:column;gap:4px"><label style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)">New hrs/wk</label>';
+  h += '<input type="number" id="hrHours" min="0" max="38" value="20" style="width:70px;padding:6px 8px;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;font-family:inherit;text-align:center"/></div>';
+  h += '<button onclick="addHourReduction()" style="padding:7px 14px;background:var(--orange);color:#fff;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer">Add</button>';
+  h += '<button onclick="document.getElementById(&quot;addHoursForm&quot;).style.display=&quot;none&quot;" style="padding:7px 12px;background:var(--surface);color:var(--muted);border:1px solid var(--border);border-radius:7px;font-size:12px;cursor:pointer">Cancel</button>';
+  h += '</div></div>';
+
+  if(!reductions.length){
+    h += '<div style="text-align:center;padding:20px;color:var(--muted);font-size:12px">No hour reductions modeled.</div>';
+  } else {
+    h += '<table class="tbl" style="font-size:12px"><thead><tr>';
+    h += '<th style="text-align:left">Person</th><th>Period</th><th>New hrs/wk</th><th>Monthly savings</th><th>Status</th><th></th>';
+    h += '</tr></thead><tbody>';
+    reductions.forEach(function(ch, idx){
+      var realIdx = (STATE.staffingChanges||[]).indexOf(ch);
+      var savings = Math.abs(ch.monthlyDelta);
+      h += '<tr>';
+      h += '<td style="font-weight:600">'+ch.personName+'</td>';
+      h += '<td>'+MONTHS[ch.startMonth]+'&ndash;'+MONTHS[ch.endMonth]+'</td>';
+      h += '<td>'+ch.newHrs+' hrs/wk</td>';
+      h += '<td style="color:var(--green);font-weight:700">'+fmt(savings)+'/mo</td>';
+      var statusClr = ch.clickupUrl ? 'color:var(--blue)' : 'color:var(--muted)';
+      h += '<td style="'+statusClr+'">'+(ch.clickupUrl?'<a href="'+ch.clickupUrl+'" target="_blank" style="color:var(--blue);text-decoration:none">In ClickUp</a>':'Draft')+'</td>';
+      h += '<td style="display:flex;gap:6px">';
+      if(!ch.clickupUrl) h += '<button onclick="sendChangeToClickUp('+realIdx+',"hours")" style="font-size:10px;padding:3px 8px;border:1px solid var(--blue-b);background:var(--blue-l);color:var(--blue);border-radius:5px;cursor:pointer">&#8594; ClickUp</button>';
+      h += '<button onclick="removeChange('+realIdx+')" style="font-size:10px;padding:3px 8px;border:1px solid var(--b2);background:var(--surface);color:var(--red);border-radius:5px;cursor:pointer">&times;</button>';
+      h += '</td></tr>';
+    });
+    h += '</tbody></table>';
+  }
+  h += '</div>';
+  return h;
+}
+
+function openAddLayoff(){
+  document.getElementById('addLayoffForm').style.display='block';
+  document.getElementById("addHoursForm").style.display="none";
+}
+function openAddHours(){
+  document.getElementById('addHoursForm').style.display='block';
+  document.getElementById("addLayoffForm").style.display="none";
+}
+
+function addLayoff(){
+  var personId   = document.getElementById('lyPerson').value;
+  var startMonth = parseInt(document.getElementById('lyStart').value);
+  var person     = STAFF.find(function(p){ return p.id===personId; });
+  if(!person) return;
+  var hrsPerMonth = (person.hrsPerWeek||person.hrs||38) * 52/12;
+  var delta = -(person.base * STAFF_MULTIPLIER * hrsPerMonth);
+  if(!STATE.staffingChanges) STATE.staffingChanges = [];
+  STATE.staffingChanges.push({
+    type:'layoff', personId:personId, personName:person.name,
+    startMonth:startMonth, endMonth:11,
+    monthlyDelta:delta, status:'draft', id:Date.now()
+  });
+  document.getElementById("addLayoffForm").style.display="none";
+  saveToServer(); render();
+}
+
+function addHourReduction(){
+  var personId   = document.getElementById('hrPerson').value;
+  var startMonth = parseInt(document.getElementById('hrStart').value);
+  var endMonth   = parseInt(document.getElementById('hrEnd').value);
+  var newHrs     = parseInt(document.getElementById('hrHours').value||0);
+  var person     = STAFF.find(function(p){ return p.id===personId; });
+  if(!person) return;
+  var currentHrs  = (person.hrsPerWeek||person.hrs||38) * 52/12;
+  var newHrsMo    = newHrs * 52/12;
+  var delta = -(person.base * STAFF_MULTIPLIER * (currentHrs - newHrsMo));
+  if(!STATE.staffingChanges) STATE.staffingChanges = [];
+  STATE.staffingChanges.push({
+    type:'hours', personId:personId, personName:person.name,
+    startMonth:startMonth, endMonth:endMonth, newHrs:newHrs,
+    monthlyDelta:delta, status:'draft', id:Date.now()
+  });
+  document.getElementById("addHoursForm").style.display="none";
+  saveToServer(); render();
+}
+
+async function sendChangeToClickUp(idx, type){
+  var ch = (STATE.staffingChanges||[])[idx];
+  if(!ch) return;
+  var name = type==='layoff'
+    ? '[Labor] Lay off '+ch.personName+' from '+MONTHS[ch.startMonth]+' — saves '+fmt(Math.abs(ch.monthlyDelta))+'/mo'
+    : '[Labor] Reduce '+ch.personName+' to '+ch.newHrs+' hrs/wk ('+MONTHS[ch.startMonth]+'–'+MONTHS[ch.endMonth]+') — saves '+fmt(Math.abs(ch.monthlyDelta))+'/mo';
+  var desc = 'Staffing change from P&L Dashboard.\nPerson: '+ch.personName+'\nType: '+type+'\nEffective: '+MONTHS[ch.startMonth]+(type==='hours'?'–'+MONTHS[ch.endMonth]:' onwards')+'\nMonthly savings: '+fmt(Math.abs(ch.monthlyDelta))+'\n\nPending implementation.';
+  try{
+    var r = await fetch('/api/clickup/task',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:name,description:desc,priority:2})});
+    var d = await r.json();
+    if(d.ok){ ch.clickupUrl=d.taskUrl; ch.status='sent'; saveToServer(); render(); }
+    else { window.alert('ClickUp error: '+d.error); }
+  } catch(e){ window.alert('Failed: '+e.message); }
+}
 
 function toggleLaborExpand(i){
   var panel = document.getElementById('lbPanel'+i);

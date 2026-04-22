@@ -1587,8 +1587,9 @@ async function bulkSendToClickUp(){
   }
 
   savePinsLocally();
-  render();
+  saveToServer();
   window.alert(sent+' item'+(sent!==1?'s':'')+' sent to ClickUp.'+(failed?' '+failed+' failed.':''));
+  render();
 }
 
 function renderPinForm(){

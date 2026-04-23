@@ -456,46 +456,6 @@ var BASELINE_MONTHLY = 47000;      // pre-raise reference
 var CURRENT_MONTHLY  = 47653;      // post-raise actual
 
 // ── FLOOR CREW — minimum viable operation ─────────────────────────────────────
-// One person per dept at 30 hrs/week. Brett is salaried — always full 38 hrs.
-var FLOOR_CREW = ['Spencer','Riley','Juan','Mike','Sterling','Brett'];
-var FLOOR_HRS  = 30;
-
-function getFloorMonthlyCost(){
-  return STAFF.reduce(function(sum, p){
-    if(FLOOR_CREW.indexOf(p.name) < 0) return sum;
-    var hrs = p.salaried ? 38 : FLOOR_HRS;
-    return sum + (p.base * STAFF_MULTIPLIER) * (hrs * 52 / 12);
-  }, 0);
-}
-
-function getRosterMonthlyCost(){
-  return STAFF.reduce(function(sum, p){
-    if(!p.active) return sum;
-    var hrs = p.hrsPerWeek !== undefined ? p.hrsPerWeek : p.hrs || 38;
-    return sum + (p.base * STAFF_MULTIPLIER) * (hrs * 52 / 12);
-  }, 0);
-}
-
-// Get labor cost for a specific month including staffing changes
-function getLaborForMonth(monthIdx){
-  var base = getRosterMonthlyCost();
-  // Apply layoffs
-  var layoffDelta = (STATE.staffingChanges || []).reduce(function(sum, ch){
-    if(ch.status === 'removed') return sum;
-    if(ch.type !== 'layoff') return sum;
-    if(monthIdx < ch.startMonth) return sum;
-    return sum + ch.monthlyDelta;
-  }, 0);
-  // Apply hour reductions
-  var hourDelta = (STATE.staffingChanges || []).reduce(function(sum, ch){
-    if(ch.status === 'removed') return sum;
-    if(ch.type !== 'hours') return sum;
-    if(monthIdx < ch.startMonth || monthIdx > ch.endMonth) return sum;
-    return sum + ch.monthlyDelta;
-  }, 0);
-  return base + layoffDelta + hourDelta;
-}
-
 var STAFF = [
   {name:'Spencer',  dept:'CS',          base:25.00,  salaried:false, builder:false, raised:false},
   {name:'Danni',    dept:'CS',          base:20.00,  salaried:false, builder:false, raised:false},
@@ -2102,285 +2062,443 @@ function onCalcSlider(){
 }
 
 // ── LABOR MODEL PAGE ─────────────────────────────────────────────────────────
+// ── LABOR PAGE CONSTANTS ──────────────────────────────────────────────────────
+var GENERIC_RATE_BASE = 18.00; // $/hr before multiplier
+var DEPT_BENCH = {
+  Building:  [{name:'Mike',base:24.00,floor:true,salaried:false},{name:'Janelle',base:21.00,floor:false,salaried:false},{name:'Eli',base:19.50,floor:false,salaried:false},{name:'Matt',base:18.00,floor:false,salaried:false}],
+  Detailing: [{name:'Juan',base:23.00,floor:true,salaried:false},{name:'Brandon',base:20.70,floor:false,salaried:false}],
+  CS:        [{name:'Spencer',base:25.00,floor:true,salaried:false},{name:'Danni',base:20.00,floor:false,salaried:false}],
+  Testing:   [{name:'Brett',base:29.93,floor:true,salaried:true},{name:'Shawn',base:22.00,floor:false,salaried:false}],
+  Shipping:  [{name:'Sterling',base:22.00,floor:true,salaried:false}],
+  Inventory: [{name:'Riley',base:25.00,floor:true,salaried:false}],
+};
+var DEPT_ORDER_LAB = ['Building','Detailing','CS','Testing','Shipping','Inventory'];
+var DEPT_COLORS_LAB = {Building:'#8b5cf6',Detailing:'#f59e0b',CS:'#3b82f6',Testing:'#06b6d4',Shipping:'#ec4899',Inventory:'#10b981'};
+var HRS_FULL_MO = 38 * 52 / 12;
+var HRS_FLOOR_MO = 30 * 52 / 12;
+
+// Get laid-off names for a specific month
+function getLaidOffNames(monthIdx){
+  return (STATE.staffingChanges||[]).filter(function(c){
+    return c.type==='layoff' && c.status!=='removed' && monthIdx >= c.startMonth;
+  }).map(function(c){ return c.personName; });
+}
+
+// Get hour reductions for a specific month -> {personName: newHrs}
+function getHourReductions(monthIdx){
+  var reductions = {};
+  (STATE.staffingChanges||[]).forEach(function(c){
+    if(c.type==='hours' && c.status!=='removed' && monthIdx>=c.startMonth && monthIdx<=c.endMonth){
+      reductions[c.personName] = c.newHrs;
+    }
+  });
+  return reductions;
+}
+
+// Calculate adjusted roster cost for a month (floor month 3+ scenario)
+function getAdjustedRosterCost(monthIdx){
+  var laidOff = getLaidOffNames(monthIdx);
+  var reductions = getHourReductions(monthIdx);
+  return STAFF.reduce(function(sum, p){
+    if(laidOff.indexOf(p.name) >= 0) return sum;
+    var currentHrs = reductions[p.name] !== undefined ? reductions[p.name] : (p.hrsPerWeek||p.hrs||38);
+    return sum + (p.base * STAFF_MULTIPLIER) * (currentHrs * 52/12);
+  }, 0);
+}
+
+// Calculate minimum required cost for a month based on volume + layoffs
+function getMinRequired(dailyUnits, detPct, laidOffNames){
+  var total = 0;
+  DEPT_ORDER_LAB.forEach(function(dept){
+    var cap = CAPACITY_LAB[dept] || CAPACITY[dept.toLowerCase()] || 10;
+    var demand = dept==='Detailing' ? dailyUnits*detPct : dailyUnits;
+    var bench = DEPT_BENCH[dept] || [];
+    var deptCost = 0;
+    var capacitySoFar = 0;
+
+    bench.forEach(function(p){
+      if(p.floor){
+        var hrs = p.salaried ? HRS_FULL_MO : HRS_FLOOR_MO;
+        var rate = (laidOffNames.indexOf(p.name)>=0) ? GENERIC_RATE_BASE : p.base;
+        deptCost += rate * STAFF_MULTIPLIER * hrs;
+        capacitySoFar += cap;
+      } else {
+        if(capacitySoFar < demand){
+          var rate = (laidOffNames.indexOf(p.name)>=0) ? GENERIC_RATE_BASE : p.base;
+          deptCost += rate * STAFF_MULTIPLIER * HRS_FULL_MO;
+          capacitySoFar += cap;
+        }
+      }
+    });
+
+    // Beyond bench — generic hires
+    while(capacitySoFar < demand){
+      deptCost += GENERIC_RATE_BASE * STAFF_MULTIPLIER * HRS_FULL_MO;
+      capacitySoFar += cap;
+    }
+
+    total += deptCost;
+  });
+  return total;
+}
+
+var CAPACITY_LAB = {Building:5.5,Detailing:10,Inventory:40,Testing:45,Shipping:25,CS:12};
+
+// Floor crew names
+var FLOOR_CREW = ['Spencer','Riley','Juan','Mike','Sterling','Brett'];
+var FLOOR_HRS  = 30;
+
+function getFloorMonthlyCost(){
+  return STAFF.reduce(function(sum,p){
+    if(FLOOR_CREW.indexOf(p.name)<0) return sum;
+    var hrs = p.salaried ? HRS_FULL_MO : HRS_FLOOR_MO;
+    return sum + (p.base * STAFF_MULTIPLIER) * hrs;
+  }, 0);
+}
+
+function getRosterMonthlyCost(){
+  return STAFF.reduce(function(sum,p){
+    if(p.active===false) return sum;
+    var hrs = (p.hrsPerWeek||p.hrs||38) * 52/12;
+    return sum + (p.base * STAFF_MULTIPLIER) * hrs;
+  }, 0);
+}
+
+// ── LABOR PAGE RENDER ─────────────────────────────────────────────────────────
 function renderLaborPage(){
   var h = '';
-  var floorCost   = getFloorMonthlyCost();
-  var rosterCost  = getRosterMonthlyCost();
-  var aboveFloor  = rosterCost - floorCost;
+  var mi = 3; // Apr — use for current month tile calcs (first projection month)
+  var laidOff = getLaidOffNames(mi);
+  var adjCost  = getAdjustedRosterCost(mi);
+  var detPct   = CALC_STATE.detailingPct/100;
+  var units    = CALC_STATE.dailyUnits;
+  var minReq   = getMinRequired(units, detPct, laidOff);
+  var delta    = adjCost - minReq;
 
-  // ── PAGE HEADER ──────────────────────────────────────────────────────────
-  h += '<div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:20px">';
-  h += '<div>';
-  h += '<h2 style="font-size:20px;letter-spacing:-.02em;margin-bottom:3px">Labor Model</h2>';
-  h += '<p style="font-size:12px;color:var(--muted)">Floor = minimum viable operation (6 staff, 30 hrs) &nbsp;&middot;&nbsp; All changes stack on top of current roster cost</p>';
-  h += '</div>';
-  h += '<div style="display:flex;gap:8px;flex-wrap:wrap">';
-  h += '<button onclick="toggleSection(&quot;rosterSection&quot;)" id="rosterBtn" style="padding:7px 14px;border:1px solid '+(STATE.panelOpen&&STATE.panelOpen['rosterSection']?'var(--blue);':'var(--b2);')+'border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;background:'+(STATE.panelOpen&&STATE.panelOpen['rosterSection']?'var(--blue-l)':'var(--surface)')+';color:'+(STATE.panelOpen&&STATE.panelOpen['rosterSection']?'var(--blue)':'var(--muted)')+'">&#9776; Staff Roster</button>';
-  h += '</div>';
-  h += '</div>';
+  // ── SCENARIO BAR (always visible) ─────────────────────────────────────────
+  h += renderScenarioBar();
 
-  // ── COLLAPSIBLE ROSTER ───────────────────────────────────────────────────
-  h += '<div id="rosterSection" style="display:'+(STATE.panelOpen&&STATE.panelOpen['rosterSection']?'block':'none')+';margin-bottom:16px">';
-  h += renderStaffRoster();
-  h += '</div>';
-
-  // ── SUMMARY CARDS ────────────────────────────────────────────────────────
+  // ── SUMMARY TILES ─────────────────────────────────────────────────────────
   h += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px">';
-  // Current roster cost
-  h += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px">';
-  h += '<div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:6px">Current Roster Cost</div>';
-  h += '<div style="font-size:24px;font-weight:700;color:var(--text)">'+fmt(rosterCost)+'/mo</div>';
-  h += '<div style="font-size:10px;color:var(--muted);margin-top:4px">All active staff at current hours</div>';
+
+  // Tile 1: Adjusted Roster Cost
+  h += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:18px 20px">';
+  h += '<div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:8px">Adjusted Roster Cost</div>';
+  h += '<div style="font-size:26px;font-weight:700;color:var(--text);letter-spacing:-.02em">'+fmt(adjCost)+'/mo</div>';
+  var savings = getRosterMonthlyCost() - adjCost;
+  h += '<div style="font-size:11px;color:var(--muted);margin-top:4px">'+(savings>0?'<span style="color:var(--green)">-'+fmt(savings)+' from changes</span>':'Base roster — no changes applied')+'</div>';
   h += '</div>';
-  // Floor cost
-  h += '<div style="background:var(--surface);border:1px solid var(--blue-b);border-radius:10px;padding:16px">';
-  h += '<div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:6px">Floor Cost</div>';
-  h += '<div style="font-size:24px;font-weight:700;color:var(--blue)">'+fmt(floorCost)+'/mo</div>';
-  h += '<div style="font-size:10px;color:var(--muted);margin-top:4px">Spencer, Riley, Juan, Mike, Sterling, Brett &mdash; 30 hrs min</div>';
+
+  // Tile 2: Minimum Required Cost
+  h += '<div style="background:var(--surface);border:1px solid var(--blue-b);border-radius:10px;padding:18px 20px">';
+  h += '<div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:8px">Minimum Required Cost</div>';
+  h += '<div style="font-size:26px;font-weight:700;color:var(--blue);letter-spacing:-.02em">'+fmt(minReq)+'/mo</div>';
+  h += '<div style="font-size:11px;color:var(--muted);margin-top:4px">Floor + staff needed for '+units+' units/day</div>';
   h += '</div>';
-  // Above floor
-  h += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px">';
-  h += '<div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:6px">Above Floor</div>';
-  h += '<div style="font-size:24px;font-weight:700;color:'+(aboveFloor>15000?'var(--red)':aboveFloor>8000?'var(--orange)':'var(--green)')+'">'+fmt(aboveFloor)+'/mo</div>';
-  h += '<div style="font-size:10px;color:var(--muted);margin-top:4px">'+fmtPct(aboveFloor/rosterCost)+' above minimum viable</div>';
+
+  // Tile 3: Required Cost Delta
+  var deltaClr = delta <= 0 ? 'var(--green)' : 'var(--red)';
+  var deltaBdr = delta <= 0 ? 'var(--green-b)' : 'var(--red-b)';
+  var deltaBg  = delta <= 0 ? 'var(--green-l)' : 'var(--red-l)';
+  h += '<div style="background:'+deltaBg+';border:1px solid '+deltaBdr+';border-radius:10px;padding:18px 20px">';
+  h += '<div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:8px">Required Cost Delta</div>';
+  h += '<div style="font-size:26px;font-weight:700;color:'+deltaClr+';letter-spacing:-.02em">'+(delta>0?'+':'')+fmt(delta)+'/mo</div>';
+  h += '<div style="font-size:11px;color:var(--muted);margin-top:4px">'+(delta>0?'Above minimum — room to reduce':'At or below minimum required')+'</div>';
   h += '</div>';
   h += '</div>';
 
-  // ── FLOOR MODEL: DEPT TABLE ──────────────────────────────────────────────
-  h += '<div class="card" style="margin-bottom:16px">';
-  h += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">';
-  h += '<div class="card-title" style="margin-bottom:0">Floor Cost Calculator — Dept Capacity at Volume</div>';
-  h += '</div>';
+  // ── VOLUME SLIDER (always visible) ───────────────────────────────────────
+  h += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 20px;margin-bottom:16px;display:flex;align-items:center;gap:16px;flex-wrap:wrap">';
+  h += '<span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)">Daily build volume</span>';
+  h += '<input type="range" min="5" max="80" step="1" value="'+units+'" id="floorUnits" oninput="onFloorUnits()" style="width:220px;accent-color:var(--blue)">';
+  h += '<span style="font-size:14px;font-weight:700;color:var(--text)" id="floorUnitsLbl">'+units+' units/day</span>';
+  h += '<span style="font-size:11px;color:var(--muted)">'+Math.round(units*22)+' units/month est.</span>';
+  h += '<div style="margin-left:auto;display:flex;align-items:center;gap:8px">';
+  h += '<span style="font-size:11px;color:var(--muted)">Detailing %</span>';
+  h += '<input type="range" min="0" max="100" step="5" value="'+Math.round(detPct*100)+'" id="detPct" oninput="onDetPct()" style="width:120px;accent-color:var(--amber)">';
+  h += '<span style="font-size:13px;font-weight:700;color:var(--text)" id="detPctLbl">'+Math.round(detPct*100)+'%</span>';
+  h += '</div></div>';
 
-  // Volume slider
-  h += '<div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap">';
-  h += '<span style="font-size:12px;color:var(--t2);font-weight:600">Daily builds:</span>';
-  h += '<input type="range" min="5" max="80" step="1" value="'+CALC_STATE.dailyUnits+'" id="floorUnits" oninput="onFloorUnits()" style="width:200px;accent-color:var(--blue)">';
-  h += '<span style="font-size:13px;font-weight:700;color:var(--text)" id="floorUnitsLbl">'+CALC_STATE.dailyUnits+' units/day</span>';
-  h += '<span style="font-size:11px;color:var(--muted)">(based on revenue scenario)</span>';
-  h += '</div>';
-
-  var units = CALC_STATE.dailyUnits;
-  var detP  = CALC_STATE.detailingPct / 100;
-  var depts = [
-    {name:'Building',  cap:5.5,  demand:units,         people:['Mike'],                    color:'#8b5cf6'},
-    {name:'Detailing', cap:10,   demand:units*detP,    people:['Juan','Brandon'],           color:'#f59e0b'},
-    {name:'Inventory', cap:40,   demand:units,         people:['Riley'],                    color:'#10b981'},
-    {name:'Testing',   cap:45,   demand:units,         people:['Shawn','Brett'],            color:'#06b6d4'},
-    {name:'Shipping',  cap:25,   demand:units,         people:['Sterling'],                 color:'#ec4899'},
-    {name:'CS',        cap:12,   demand:units,         people:['Spencer','Danni'],          color:'#3b82f6'},
-  ];
-
-  h += '<div style="background:var(--s2);border:1px solid var(--border);border-radius:8px;overflow:hidden">';
-  h += '<div style="display:grid;grid-template-columns:110px 90px 90px 90px 90px 100px 1fr;background:var(--surface2)">';
-  ['Dept','Cap/person','Demand','You have','Need','Surplus','Monthly cost'].forEach(function(c,i){
-    h += '<div style="padding:7px 10px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);text-align:'+(i===0?'left':'right')+'">'+c+'</div>';
+  // ── TABS ──────────────────────────────────────────────────────────────────
+  var laborTab = STATE.laborTab || 'overview';
+  h += '<div style="display:flex;gap:0;border-bottom:2px solid var(--border);margin-bottom:16px">';
+  ['overview','roster'].forEach(function(tab){
+    var label = tab==='overview' ? 'Labor Overview' : 'Staff Roster';
+    var active = laborTab===tab;
+    h += '<button onclick="setLaborTab(\''+tab+'\')" style="padding:10px 20px;border:none;background:none;font-family:inherit;font-size:13px;font-weight:'+(active?'700':'500')+';color:'+(active?'var(--blue)':'var(--muted)')+';border-bottom:'+(active?'2px solid var(--blue)':'2px solid transparent')+';cursor:pointer;margin-bottom:-2px">'+label+'</button>';
   });
   h += '</div>';
 
-  depts.forEach(function(dept){
-    var activeMembers = STAFF.filter(function(p){ return p.active !== false && dept.people.indexOf(p.name) >= 0; });
-    var headcount = activeMembers.length;
-    var capacity  = headcount * dept.cap;
-    var needed    = Math.ceil(dept.demand / dept.cap);
-    var surplus   = capacity - dept.demand;
-    var monthly   = activeMembers.reduce(function(s,p){
-      var hrs = p.hrsPerWeek !== undefined ? p.hrsPerWeek : p.hrs || 38;
-      return s + (p.base * STAFF_MULTIPLIER) * (hrs*52/12);
-    }, 0);
-    var surplusClr = surplus < 0 ? 'color:var(--red);font-weight:700' : surplus < dept.cap ? 'color:var(--green)' : 'color:var(--amber)';
-    var surplusTxt = (surplus >= 0 ? '+' : '')+surplus.toFixed(1)+' /day';
-
-    // Floor indicator
-    var isFloorPerson = dept.people.some(function(n){ return FLOOR_CREW.indexOf(n) >= 0; });
-    var floorMember = FLOOR_CREW.filter(function(n){ return dept.people.indexOf(n) >= 0; })[0];
-
-    h += '<div style="display:grid;grid-template-columns:110px 90px 90px 90px 90px 100px 1fr;border-top:1px solid var(--border);align-items:center">';
-    h += '<div style="padding:8px 10px;display:flex;align-items:center;gap:5px">';
-    h += '<span style="width:6px;height:6px;border-radius:2px;background:'+dept.color+';flex-shrink:0"></span>';
-    h += '<span style="font-weight:600;font-size:12px">'+dept.name+'</span></div>';
-    h += '<div style="padding:8px 10px;text-align:right;color:var(--muted);font-size:11px">'+dept.cap+'/day</div>';
-    h += '<div style="padding:8px 10px;text-align:right;font-size:11px;color:var(--t2)">'+dept.demand.toFixed(0)+'/day</div>';
-    h += '<div style="padding:8px 10px;text-align:right;font-weight:600">'+headcount+' ('+(activeMembers.map(function(p){return p.name;}).join(', '))+')</div>';
-    h += '<div style="padding:8px 10px;text-align:right;font-size:11px;color:'+(needed>headcount?'var(--red)':' var(--green)')+'">'+needed+'</div>';
-    h += '<div style="padding:8px 10px;text-align:right;font-size:11px;'+surplusClr+'">'+surplusTxt+'</div>';
-    h += '<div style="padding:8px 10px;text-align:right;font-weight:600">'+fmt(monthly)+'/mo</div>';
-    h += '</div>';
-  });
-
-  // Total
-  h += '<div style="display:grid;grid-template-columns:110px 90px 90px 90px 90px 100px 1fr;background:var(--s2);border-top:2px solid var(--border2)">';
-  h += '<div style="padding:8px 10px;font-weight:700;color:var(--text)">Total</div>';
-  h += '<div></div><div></div><div></div><div></div><div></div>';
-  h += '<div style="padding:8px 10px;text-align:right;font-weight:700;color:var(--text)">'+fmt(rosterCost)+'/mo</div>';
-  h += '</div>';
-  h += '</div>'; // end dept table
-  h += '</div>'; // end card
-
-  // ── FLOOR vs CURRENT vs SCENARIO ─────────────────────────────────────────
-  h += '<div class="card" style="margin-bottom:16px">';
-  h += '<div class="card-title">Projection vs Current Roster vs Floor — Apr–Dec</div>';
-  h += '<div style="overflow-x:auto"><table class="tbl" style="font-size:11px"><thead><tr>';
-  h += '<th style="text-align:left;width:110px">Line</th>';
-  for(var i=3;i<12;i++) h += '<th>'+MONTHS[i]+'</th>';
-  h += '</tr></thead><tbody>';
-
-  var scenRows2 = [
-    {label:'Projection sheet', fn:function(i){ return getLaborBase(i); }, style:'color:var(--t2)'},
-    {label:'Current roster',   fn:function(i){ return rosterCost; },       style:'color:var(--text);font-weight:600'},
-    {label:'Floor cost',       fn:function(i){ return floorCost; },         style:'color:var(--blue);font-weight:600'},
-    {label:'Delta (roster−proj)', fn:function(i){ return rosterCost - getLaborBase(i); }, style:'', delta:true},
-  ];
-  scenRows2.forEach(function(row){
-    h += '<tr><td style="'+row.style+'">'+row.label+'</td>';
-    for(var i=3;i<12;i++){
-      var v = row.fn(i);
-      var clr = row.delta ? (v>0?'color:var(--red)':v<0?'color:var(--green)':'') : row.style;
-      h += '<td style="'+clr+'">'+fmt(v)+'</td>';
-    }
-    h += '</tr>';
-  });
-  h += '</tbody></table></div>';
-  h += '</div>'; // end card
-
-  // ── STAFFING CHANGES: LAYOFFS ─────────────────────────────────────────────
-  h += renderLayoffsPanel();
-
-  // ── STAFFING CHANGES: HOUR REDUCTIONS ────────────────────────────────────
-  h += renderHourReductionsPanel();
+  if(laborTab==='overview') h += renderLaborOverviewTab();
+  else h += renderLaborRosterTab();
 
   return h;
 }
 
-function onFloorUnits(){
-  var val = parseInt(document.getElementById('floorUnits').value, 10);
-  CALC_STATE.dailyUnits = val;
-  var lbl = document.getElementById('floorUnitsLbl');
-  if(lbl) lbl.textContent = val + ' units/day';
-  // Re-render just the labor page content
+function setLaborTab(tab){
+  STATE.laborTab = tab;
   var el = document.getElementById('mainContent');
   if(el) el.innerHTML = renderLaborPage();
   else render();
 }
 
-function renderLayoffsPanel(){
-  var layoffs = (STATE.staffingChanges||[]).filter(function(c){ return c.type==='layoff' && c.status!=='removed'; });
-  var h = '<div class="card" style="margin-bottom:16px">';
-  h += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">';
-  h += '<div class="card-title" style="margin-bottom:0">Layoffs <span style="font-size:10px;color:var(--muted);font-weight:400">(permanent from start month onward)</span></div>';
-  h += '<button onclick="openAddLayoff()" style="padding:6px 12px;background:var(--red-l);color:var(--red);border:1px solid var(--red-b);border-radius:7px;font-size:11px;font-weight:700;cursor:pointer">+ Add Layoff</button>';
-  h += '</div>';
+function onFloorUnits(){
+  var val = parseInt(document.getElementById('floorUnits').value,10);
+  CALC_STATE.dailyUnits = val;
+  var lbl = document.getElementById('floorUnitsLbl');
+  if(lbl) lbl.textContent = val+' units/day';
+  var lbl2 = document.getElementById('floorUnitsLbl');
+  var el = document.getElementById('mainContent');
+  if(el) el.innerHTML = renderLaborPage();
+}
 
-  // Add form
-  h += '<div id="addLayoffForm" style="display:none;background:var(--s2);border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:12px">';
-  h += '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">';
-  h += '<div style="display:flex;flex-direction:column;gap:4px"><label style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)">Person</label>';
-  h += '<select id="lyPerson" style="padding:6px 10px;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;font-family:inherit">';
-  STAFF.forEach(function(p){ if(p.active!==false) h += '<option value="'+p.id+'">'+p.name+' ('+p.dept+')</option>'; });
-  h += '</select></div>';
-  h += '<div style="display:flex;flex-direction:column;gap:4px"><label style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)">From month</label>';
-  h += '<select id="lyStart" style="padding:6px 10px;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;font-family:inherit">';
-  ['Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'].forEach(function(m,i){ h += '<option value="'+(i+3)+'">'+m+'</option>'; });
-  h += '</select></div>';
-  h += '<button onclick="addLayoff()" style="padding:7px 14px;background:var(--red);color:#fff;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer">Add</button>';
-  h += '<button onclick="document.getElementById(&quot;addLayoffForm&quot;).style.display=&quot;none&quot;" style="padding:7px 12px;background:var(--surface);color:var(--muted);border:1px solid var(--border);border-radius:7px;font-size:12px;cursor:pointer">Cancel</button>';
-  h += '</div></div>';
+function onDetPct(){
+  var val = parseInt(document.getElementById('detPct').value,10);
+  CALC_STATE.detailingPct = val;
+  var lbl = document.getElementById('detPctLbl');
+  if(lbl) lbl.textContent = val+'%';
+  var el = document.getElementById('mainContent');
+  if(el) el.innerHTML = renderLaborPage();
+}
 
-  if(!layoffs.length){
-    h += '<div style="text-align:center;padding:20px;color:var(--muted);font-size:12px">No layoffs modeled.</div>';
-  } else {
-    h += '<table class="tbl" style="font-size:12px"><thead><tr>';
-    h += '<th style="text-align:left">Person</th><th>From</th><th>Monthly savings</th><th>Months affected</th><th>Status</th><th></th>';
-    h += '</tr></thead><tbody>';
-    layoffs.forEach(function(ch, idx){
-      var savings = Math.abs(ch.monthlyDelta);
-      var monthsAffected = 12 - ch.startMonth;
-      var totalSavings = savings * monthsAffected;
-      h += '<tr>';
-      h += '<td style="font-weight:600">'+ch.personName+'</td>';
-      h += '<td>'+MONTHS[ch.startMonth]+' onward</td>';
-      h += '<td style="color:var(--green);font-weight:700">'+fmt(savings)+'/mo</td>';
-      h += '<td style="color:var(--muted)">'+monthsAffected+' months ('+fmt(totalSavings)+' total)</td>';
-      var statusClr = ch.clickupUrl ? 'color:var(--blue)' : 'color:var(--muted)';
-      h += '<td style="'+statusClr+'">'+(ch.clickupUrl?'<a href="'+ch.clickupUrl+'" target="_blank" style="color:var(--blue);text-decoration:none">In ClickUp</a>':'Draft')+'</td>';
-      h += '<td style="display:flex;gap:6px">';
-      if(!ch.clickupUrl) h += '<button onclick="sendChangeToClickUp('+idx+',"layoff")" style="font-size:10px;padding:3px 8px;border:1px solid var(--blue-b);background:var(--blue-l);color:var(--blue);border-radius:5px;cursor:pointer">&#8594; ClickUp</button>';
-      h += '<button onclick="removeChange('+idx+')" style="font-size:10px;padding:3px 8px;border:1px solid var(--b2);background:var(--surface);color:var(--red);border-radius:5px;cursor:pointer">&times;</button>';
-      h += '</td></tr>';
-    });
-    h += '</tbody></table>';
-    // Total impact
-    var totalLayoffSavings = layoffs.reduce(function(s,ch){ return s + Math.abs(ch.monthlyDelta); }, 0);
-    h += '<div style="margin-top:10px;padding:10px 12px;background:var(--green-l);border:1px solid var(--green-b);border-radius:7px;font-size:12px;color:var(--green);font-weight:600">';
-    h += 'Total monthly savings from layoffs: '+fmt(totalLayoffSavings)+'/mo</div>';
+// ── TAB 1: LABOR OVERVIEW ─────────────────────────────────────────────────────
+function renderLaborOverviewTab(){
+  var h = '';
+  // Apr–Dec comparison table: Projection vs Adjusted vs Min Required vs Floor
+  h += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px 20px;margin-bottom:16px">';
+  h += '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:14px">Labor — Apr–Dec Comparison</div>';
+  h += '<div style="overflow-x:auto"><table class="tbl" style="font-size:11px"><thead><tr>';
+  h += '<th style="text-align:left;min-width:140px">Line</th>';
+  for(var i=3;i<12;i++) h += '<th>'+MONTHS[i]+'</th>';
+  h += '<th>Total</th></tr></thead><tbody>';
+
+  var floorCost = getFloorMonthlyCost();
+  var detP = CALC_STATE.detailingPct/100;
+  var units = CALC_STATE.dailyUnits;
+
+  var rows = [
+    {label:'Projection sheet', fn:function(i){ return getLaborBase(i); }, style:'color:var(--t2)'},
+    {label:'Adjusted roster',  fn:function(i){ return i<3?getTotalLabor(i):getAdjustedRosterCost(i); }, style:'color:var(--text);font-weight:600'},
+    {label:'Min required',     fn:function(i){ return i<3?getFloorMonthlyCost():getMinRequired(units,detP,getLaidOffNames(i)); }, style:'color:var(--blue);font-weight:600'},
+    {label:'Floor (absolute)', fn:function(i){ return floorCost; }, style:'color:var(--muted)'},
+  ];
+
+  rows.forEach(function(row){
+    var fy=0; for(var i=3;i<12;i++) fy+=(row.fn(i)||0);
+    h += '<tr><td style="'+row.style+'">'+row.label+'</td>';
+    for(var i=3;i<12;i++){
+      var v=row.fn(i)||0;
+      h += '<td style="'+row.style+'">'+fmt(v)+'</td>';
+    }
+    h += '<td style="'+row.style+';font-weight:700">'+fmt(fy)+'</td></tr>';
+  });
+
+  // Delta row: adjusted minus min required
+  h += '<tr style="border-top:2px solid var(--border)">';
+  h += '<td style="font-weight:700">Delta (adj - min)</td>';
+  var fyDelta=0;
+  for(var i=3;i<12;i++){
+    var d = getAdjustedRosterCost(i) - getMinRequired(units,detP,getLaidOffNames(i));
+    fyDelta+=d;
+    h += '<td style="font-weight:700;color:'+(d>0?'var(--red)':'var(--green)')+'">'+fmt(d)+'</td>';
   }
-  h += '</div>';
+  h += '<td style="font-weight:700;color:'+(fyDelta>0?'var(--red)':'var(--green)')+'">'+fmt(fyDelta)+'</td>';
+  h += '</tr>';
+
+  h += '</tbody></table></div></div>';
+
+  // Labor breakdown from projection sheet rows
+  h += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px 20px">';
+  h += '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:14px">Projection Sheet Labor Breakdown — Actuals vs Projection</div>';
+  h += '<div style="overflow-x:auto"><table class="tbl" style="font-size:11px"><thead><tr>';
+  h += '<th style="text-align:left">Category</th>';
+  for(var i=0;i<12;i++) h += '<th style="'+(i<=D.act_thru?'color:var(--text)':'')+'">'+MONTHS[i]+'</th>';
+  h += '<th>Total</th></tr></thead><tbody>';
+
+  var laborRows = [
+    {label:'Employee Labor & Taxes', fn:function(i){ return D.labor_row118[i]||0; }},
+    {label:'Benefits (401k+Health)', fn:function(i){ return D.labor_row119[i]||0; }},
+    {label:'Creative Contractors',   fn:function(i){ return D.labor_row120[i]||0; }},
+    {label:'Other Labor',            fn:function(i){ return D.labor_row121[i]||0; }},
+  ];
+
+  laborRows.forEach(function(row){
+    var fy=0; for(var i=0;i<12;i++) fy+=(row.fn(i)||0);
+    h += '<tr><td>'+row.label+'</td>';
+    for(var i=0;i<12;i++){
+      var v=row.fn(i)||0;
+      var act = i<=D.act_thru ? 'color:var(--text)' : '';
+      h += '<td style="'+act+'">'+fmt(v)+'</td>';
+    }
+    h += '<td style="font-weight:700">'+fmt(fy)+'</td></tr>';
+  });
+
+  // Total row
+  var totals = [];
+  for(var i=0;i<12;i++) totals.push(laborRows.reduce(function(s,r){return s+(r.fn(i)||0);},0));
+  var grandTotal = totals.reduce(function(a,b){return a+b;},0);
+  h += '<tr style="border-top:2px solid var(--border)"><td style="font-weight:700">Total Labor</td>';
+  totals.forEach(function(v,i){
+    h += '<td style="font-weight:700;'+(i<=D.act_thru?'color:var(--text)':'')+'">'+fmt(v)+'</td>';
+  });
+  h += '<td style="font-weight:700">'+fmt(grandTotal)+'</td></tr>';
+  h += '</tbody></table></div></div>';
+
   return h;
 }
 
-function renderHourReductionsPanel(){
-  var reductions = (STATE.staffingChanges||[]).filter(function(c){ return c.type==='hours' && c.status!=='removed'; });
-  var h = '<div class="card" style="margin-bottom:16px">';
+// ── TAB 2: STAFF ROSTER ───────────────────────────────────────────────────────
+function renderLaborRosterTab(){
+  var h = '';
+  h += renderStaffRosterSection();
+  h += renderHourReductionsSection();
+  h += renderLayoffsSection();
+  return h;
+}
+
+function renderStaffRosterSection(){
+  var h = '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px 20px;margin-bottom:16px">';
+  h += '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:14px">Staff Roster — Headcount & Hours</div>';
+  h += '<table class="tbl" style="font-size:12px"><thead><tr>';
+  h += '<th style="text-align:left">Name</th><th style="text-align:left">Dept</th><th>Base</th><th>Loaded/hr</th><th>Hrs/wk</th><th>Monthly cost</th><th>Floor?</th>';
+  h += '</tr></thead><tbody>';
+
+  var totalCost = 0;
+  STAFF.forEach(function(p){
+    if(p.active===false) return;
+    var loaded = p.base * STAFF_MULTIPLIER;
+    var hrs = p.hrsPerWeek||p.hrs||38;
+    var monthly = loaded * (hrs*52/12);
+    totalCost += monthly;
+    var isFloor = FLOOR_CREW.indexOf(p.name) >= 0;
+    h += '<tr>';
+    h += '<td style="font-weight:600">'+p.name+'</td>';
+    h += '<td style="color:var(--muted)">'+p.dept+'</td>';
+    h += '<td>$'+p.base.toFixed(2)+'/hr</td>';
+    h += '<td>$'+loaded.toFixed(2)+'/hr</td>';
+    h += '<td>'+hrs+' hrs</td>';
+    h += '<td style="font-weight:600">'+fmt(monthly)+'/mo</td>';
+    h += '<td style="text-align:center">'+(isFloor?'<span style="color:var(--blue);font-weight:700">&#10003;</span>':'')+'</td>';
+    h += '</tr>';
+  });
+
+  h += '<tr style="border-top:2px solid var(--border)">';
+  h += '<td colspan="5" style="font-weight:700">Total</td>';
+  h += '<td style="font-weight:700">'+fmt(totalCost)+'/mo</td>';
+  h += '<td></td></tr>';
+  h += '</tbody></table></div>';
+  return h;
+}
+
+function renderHourReductionsSection(){
+  var reductions = (STATE.staffingChanges||[]).filter(function(c){ return c.type==='hours'&&c.status!=='removed'; });
+  var h = '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px 20px;margin-bottom:16px">';
   h += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">';
-  h += '<div class="card-title" style="margin-bottom:0">Hour Reductions <span style="font-size:10px;color:var(--muted);font-weight:400">(temporary, specific months)</span></div>';
-  h += '<button onclick="openAddHours()" style="padding:6px 12px;background:var(--orange-l);color:var(--orange);border:1px solid var(--orange-b);border-radius:7px;font-size:11px;font-weight:700;cursor:pointer">+ Add Reduction</button>';
+  h += '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--muted)">Hour Reductions <span style="font-size:10px;color:var(--muted);font-weight:400;text-transform:none">(temporary)</span></div>';
+  h += '<button onclick="toggleAddForm(\'addHoursForm\')" style="padding:6px 12px;background:var(--orange-l);color:var(--orange);border:1px solid var(--orange-b);border-radius:7px;font-size:11px;font-weight:700;cursor:pointer">+ Add Reduction</button>';
   h += '</div>';
 
-  // Add form
   h += '<div id="addHoursForm" style="display:none;background:var(--s2);border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:12px">';
   h += '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">';
-  h += '<div style="display:flex;flex-direction:column;gap:4px"><label style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)">Person</label>';
-  h += '<select id="hrPerson" style="padding:6px 10px;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;font-family:inherit">';
-  STAFF.forEach(function(p){ if(p.active!==false) h += '<option value="'+p.id+'">'+p.name+' ('+p.dept+')</option>'; });
-  h += '</select></div>';
-  h += '<div style="display:flex;flex-direction:column;gap:4px"><label style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)">From</label>';
-  h += '<select id="hrStart" style="padding:6px 10px;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;font-family:inherit">';
-  ['Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'].forEach(function(m,i){ h += '<option value="'+(i+3)+'">'+m+'</option>'; });
-  h += '</select></div>';
-  h += '<div style="display:flex;flex-direction:column;gap:4px"><label style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)">To</label>';
-  h += '<select id="hrEnd" style="padding:6px 10px;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;font-family:inherit">';
-  ['Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'].forEach(function(m,i){ h += '<option value="'+(i+3)+'" '+(i===8?'selected':'')+'>'+m+'</option>'; });
-  h += '</select></div>';
+  h += formSelect('hrPerson','Person',STAFF.filter(function(p){return p.active!==false;}).map(function(p){return {val:p.id,lbl:p.name+' ('+p.dept+')'};}));
+  h += formSelect('hrStart','From',['Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'].map(function(m,i){return{val:i+3,lbl:m};}));
+  h += formSelect('hrEnd','To',['Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'].map(function(m,i){return{val:i+3,lbl:m,sel:i===8};}));
   h += '<div style="display:flex;flex-direction:column;gap:4px"><label style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)">New hrs/wk</label>';
-  h += '<input type="number" id="hrHours" min="0" max="38" value="20" style="width:70px;padding:6px 8px;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;font-family:inherit;text-align:center"/></div>';
-  h += '<button onclick="addHourReduction()" style="padding:7px 14px;background:var(--orange);color:#fff;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer">Add</button>';
-  h += '<button onclick="document.getElementById(&quot;addHoursForm&quot;).style.display=&quot;none&quot;" style="padding:7px 12px;background:var(--surface);color:var(--muted);border:1px solid var(--border);border-radius:7px;font-size:12px;cursor:pointer">Cancel</button>';
+  h += '<input type="number" id="hrHours" min="0" max="38" value="20" style="width:70px;padding:6px 8px;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;text-align:center"/></div>';
+  h += '<button onclick="addHourReduction()" style="padding:7px 14px;background:var(--orange);color:#fff;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;align-self:flex-end">Add</button>';
+  h += '<button onclick="toggleAddForm(\'addHoursForm\')" style="padding:7px 12px;background:var(--surface);color:var(--muted);border:1px solid var(--border);border-radius:7px;font-size:12px;cursor:pointer;align-self:flex-end">Cancel</button>';
   h += '</div></div>';
 
   if(!reductions.length){
-    h += '<div style="text-align:center;padding:20px;color:var(--muted);font-size:12px">No hour reductions modeled.</div>';
+    h += '<div style="text-align:center;padding:20px;color:var(--muted);font-size:12px">No hour reductions modeled yet.</div>';
   } else {
     h += '<table class="tbl" style="font-size:12px"><thead><tr>';
-    h += '<th style="text-align:left">Person</th><th>Period</th><th>New hrs/wk</th><th>Monthly savings</th><th>Status</th><th></th>';
+    h += '<th style="text-align:left">Person</th><th>Period</th><th>New hrs/wk</th><th>Savings/mo</th><th>Status</th><th></th>';
     h += '</tr></thead><tbody>';
-    reductions.forEach(function(ch, idx){
-      var realIdx = (STATE.staffingChanges||[]).indexOf(ch);
-      var savings = Math.abs(ch.monthlyDelta);
+    var totalSavings = 0;
+    reductions.forEach(function(ch){
+      var realIdx = STATE.staffingChanges.indexOf(ch);
+      var sav = Math.abs(ch.monthlyDelta);
+      totalSavings += sav;
       h += '<tr>';
       h += '<td style="font-weight:600">'+ch.personName+'</td>';
       h += '<td>'+MONTHS[ch.startMonth]+'&ndash;'+MONTHS[ch.endMonth]+'</td>';
       h += '<td>'+ch.newHrs+' hrs/wk</td>';
-      h += '<td style="color:var(--green);font-weight:700">'+fmt(savings)+'/mo</td>';
-      var statusClr = ch.clickupUrl ? 'color:var(--blue)' : 'color:var(--muted)';
-      h += '<td style="'+statusClr+'">'+(ch.clickupUrl?'<a href="'+ch.clickupUrl+'" target="_blank" style="color:var(--blue);text-decoration:none">In ClickUp</a>':'Draft')+'</td>';
-      h += '<td style="display:flex;gap:6px">';
-      if(!ch.clickupUrl) h += '<button onclick="sendChangeToClickUp('+realIdx+',"hours")" style="font-size:10px;padding:3px 8px;border:1px solid var(--blue-b);background:var(--blue-l);color:var(--blue);border-radius:5px;cursor:pointer">&#8594; ClickUp</button>';
+      h += '<td style="color:var(--green);font-weight:700">'+fmt(sav)+'/mo</td>';
+      h += '<td>'+(ch.clickupUrl?'<a href="'+ch.clickupUrl+'" target="_blank" style="color:var(--blue);text-decoration:none;font-size:11px">In ClickUp</a>':'<span style="color:var(--muted);font-size:11px">Draft</span>')+'</td>';
+      h += '<td style="display:flex;gap:5px">';
+      if(!ch.clickupUrl) h += '<button onclick="sendLaborChangeToClickUp('+realIdx+')" style="font-size:10px;padding:3px 8px;border:1px solid var(--blue-b);background:var(--blue-l);color:var(--blue);border-radius:5px;cursor:pointer">&#8594; CU</button>';
       h += '<button onclick="removeChange('+realIdx+')" style="font-size:10px;padding:3px 8px;border:1px solid var(--b2);background:var(--surface);color:var(--red);border-radius:5px;cursor:pointer">&times;</button>';
       h += '</td></tr>';
     });
     h += '</tbody></table>';
+    h += '<div style="margin-top:10px;padding:8px 12px;background:var(--green-l);border:1px solid var(--green-b);border-radius:7px;font-size:12px;color:var(--green);font-weight:600">Total monthly savings: '+fmt(totalSavings)+'/mo</div>';
   }
   h += '</div>';
   return h;
 }
 
-function openAddLayoff(){
-  document.getElementById('addLayoffForm').style.display='block';
-  document.getElementById("addHoursForm").style.display="none";
+function renderLayoffsSection(){
+  var layoffs = (STATE.staffingChanges||[]).filter(function(c){ return c.type==='layoff'&&c.status!=='removed'; });
+  var h = '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px 20px;margin-bottom:16px">';
+  h += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">';
+  h += '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--muted)">Layoffs <span style="font-size:10px;color:var(--muted);font-weight:400;text-transform:none">(permanent)</span></div>';
+  h += '<button onclick="toggleAddForm(\'addLayoffForm\')" style="padding:6px 12px;background:var(--red-l);color:var(--red);border:1px solid var(--red-b);border-radius:7px;font-size:11px;font-weight:700;cursor:pointer">+ Add Layoff</button>';
+  h += '</div>';
+
+  h += '<div id="addLayoffForm" style="display:none;background:var(--s2);border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:12px">';
+  h += '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">';
+  h += formSelect('lyPerson','Person',STAFF.filter(function(p){return p.active!==false;}).map(function(p){return{val:p.id,lbl:p.name+' ('+p.dept+')'};}));
+  h += formSelect('lyStart','From month',['Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'].map(function(m,i){return{val:i+3,lbl:m};}));
+  h += '<button onclick="addLayoff()" style="padding:7px 14px;background:var(--red);color:#fff;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;align-self:flex-end">Add</button>';
+  h += '<button onclick="toggleAddForm(\'addLayoffForm\')" style="padding:7px 12px;background:var(--surface);color:var(--muted);border:1px solid var(--border);border-radius:7px;font-size:12px;cursor:pointer;align-self:flex-end">Cancel</button>';
+  h += '</div></div>';
+
+  if(!layoffs.length){
+    h += '<div style="text-align:center;padding:20px;color:var(--muted);font-size:12px">No layoffs modeled yet.</div>';
+  } else {
+    h += '<table class="tbl" style="font-size:12px"><thead><tr>';
+    h += '<th style="text-align:left">Person</th><th>From</th><th>Savings/mo</th><th>Remaining months</th><th>Total savings</th><th>Status</th><th></th>';
+    h += '</tr></thead><tbody>';
+    var totalSavings = 0;
+    layoffs.forEach(function(ch){
+      var realIdx = STATE.staffingChanges.indexOf(ch);
+      var sav = Math.abs(ch.monthlyDelta);
+      var months = 12 - ch.startMonth;
+      var total = sav * months;
+      totalSavings += sav;
+      h += '<tr>';
+      h += '<td style="font-weight:600">'+ch.personName+'</td>';
+      h += '<td>'+MONTHS[ch.startMonth]+' onward</td>';
+      h += '<td style="color:var(--green);font-weight:700">'+fmt(sav)+'/mo</td>';
+      h += '<td style="color:var(--muted)">'+months+' months</td>';
+      h += '<td style="font-weight:600">'+fmt(total)+'</td>';
+      h += '<td>'+(ch.clickupUrl?'<a href="'+ch.clickupUrl+'" target="_blank" style="color:var(--blue);text-decoration:none;font-size:11px">In ClickUp</a>':'<span style="color:var(--muted);font-size:11px">Draft</span>')+'</td>';
+      h += '<td style="display:flex;gap:5px">';
+      if(!ch.clickupUrl) h += '<button onclick="sendLaborChangeToClickUp('+realIdx+')" style="font-size:10px;padding:3px 8px;border:1px solid var(--blue-b);background:var(--blue-l);color:var(--blue);border-radius:5px;cursor:pointer">&#8594; CU</button>';
+      h += '<button onclick="removeChange('+realIdx+')" style="font-size:10px;padding:3px 8px;border:1px solid var(--b2);background:var(--surface);color:var(--red);border-radius:5px;cursor:pointer">&times;</button>';
+      h += '</td></tr>';
+    });
+    h += '</tbody></table>';
+    h += '<div style="margin-top:10px;padding:8px 12px;background:var(--green-l);border:1px solid var(--green-b);border-radius:7px;font-size:12px;color:var(--green);font-weight:600">Total monthly savings: '+fmt(totalSavings)+'/mo</div>';
+  }
+  h += '</div>';
+  return h;
 }
-function openAddHours(){
-  document.getElementById('addHoursForm').style.display='block';
-  document.getElementById("addLayoffForm").style.display="none";
+
+// ── HELPERS ───────────────────────────────────────────────────────────────────
+function formSelect(id, label, options){
+  var h = '<div style="display:flex;flex-direction:column;gap:4px">';
+  h += '<label style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)">'+label+'</label>';
+  h += '<select id="'+id+'" style="padding:6px 10px;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;font-family:inherit">';
+  options.forEach(function(o){ h += '<option value="'+o.val+'"'+(o.sel?' selected':'')+'>'+o.lbl+'</option>'; });
+  h += '</select></div>';
+  return h;
+}
+
+function toggleAddForm(id){
+  var el = document.getElementById(id);
+  if(el) el.style.display = el.style.display==='none'?'block':'none';
 }
 
 function addLayoff(){
@@ -2388,15 +2506,11 @@ function addLayoff(){
   var startMonth = parseInt(document.getElementById('lyStart').value);
   var person     = STAFF.find(function(p){ return p.id===personId; });
   if(!person) return;
-  var hrsPerMonth = (person.hrsPerWeek||person.hrs||38) * 52/12;
-  var delta = -(person.base * STAFF_MULTIPLIER * hrsPerMonth);
-  if(!STATE.staffingChanges) STATE.staffingChanges = [];
-  STATE.staffingChanges.push({
-    type:'layoff', personId:personId, personName:person.name,
-    startMonth:startMonth, endMonth:11,
-    monthlyDelta:delta, status:'draft', id:Date.now()
-  });
-  document.getElementById("addLayoffForm").style.display="none";
+  var hrs = (person.hrsPerWeek||person.hrs||38) * 52/12;
+  var delta = -(person.base * STAFF_MULTIPLIER * hrs);
+  if(!STATE.staffingChanges) STATE.staffingChanges=[];
+  STATE.staffingChanges.push({type:'layoff',personId:personId,personName:person.name,startMonth:startMonth,endMonth:11,monthlyDelta:delta,status:'draft',id:Date.now()});
+  toggleAddForm('addLayoffForm');
   saveToServer(); render();
 }
 
@@ -2407,32 +2521,48 @@ function addHourReduction(){
   var newHrs     = parseInt(document.getElementById('hrHours').value||0);
   var person     = STAFF.find(function(p){ return p.id===personId; });
   if(!person) return;
-  var currentHrs  = (person.hrsPerWeek||person.hrs||38) * 52/12;
-  var newHrsMo    = newHrs * 52/12;
-  var delta = -(person.base * STAFF_MULTIPLIER * (currentHrs - newHrsMo));
-  if(!STATE.staffingChanges) STATE.staffingChanges = [];
-  STATE.staffingChanges.push({
-    type:'hours', personId:personId, personName:person.name,
-    startMonth:startMonth, endMonth:endMonth, newHrs:newHrs,
-    monthlyDelta:delta, status:'draft', id:Date.now()
-  });
-  document.getElementById("addHoursForm").style.display="none";
+  var currentHrsMo = (person.hrsPerWeek||person.hrs||38)*52/12;
+  var newHrsMo     = newHrs*52/12;
+  var delta = -(person.base * STAFF_MULTIPLIER * (currentHrsMo - newHrsMo));
+  if(!STATE.staffingChanges) STATE.staffingChanges=[];
+  STATE.staffingChanges.push({type:'hours',personId:personId,personName:person.name,startMonth:startMonth,endMonth:endMonth,newHrs:newHrs,monthlyDelta:delta,status:'draft',id:Date.now()});
+  toggleAddForm('addHoursForm');
   saveToServer(); render();
 }
 
-async function sendChangeToClickUp(idx, type){
+function removeChange(idx){
+  if(!STATE.staffingChanges||!STATE.staffingChanges[idx]) return;
+  STATE.staffingChanges[idx].status='removed';
+  saveToServer(); render();
+}
+
+async function sendLaborChangeToClickUp(idx){
   var ch = (STATE.staffingChanges||[])[idx];
   if(!ch) return;
-  var name = type==='layoff'
+  var name = ch.type==='layoff'
     ? '[Labor] Lay off '+ch.personName+' from '+MONTHS[ch.startMonth]+' — saves '+fmt(Math.abs(ch.monthlyDelta))+'/mo'
-    : '[Labor] Reduce '+ch.personName+' to '+ch.newHrs+' hrs/wk ('+MONTHS[ch.startMonth]+'–'+MONTHS[ch.endMonth]+') — saves '+fmt(Math.abs(ch.monthlyDelta))+'/mo';
-  var desc = 'Staffing change from P&L Dashboard.\nPerson: '+ch.personName+'\nType: '+type+'\nEffective: '+MONTHS[ch.startMonth]+(type==='hours'?'–'+MONTHS[ch.endMonth]:' onwards')+'\nMonthly savings: '+fmt(Math.abs(ch.monthlyDelta))+'\n\nPending implementation.';
+    : '[Labor] Reduce '+ch.personName+' to '+ch.newHrs+' hrs/wk ('+MONTHS[ch.startMonth]+'\u2013'+MONTHS[ch.endMonth]+') — saves '+fmt(Math.abs(ch.monthlyDelta))+'/mo';
+  var desc = 'Staffing change from P&L Dashboard.\nPerson: '+ch.personName+'\nType: '+ch.type+'\nEffective: '+MONTHS[ch.startMonth]+(ch.type==='hours'?'\u2013'+MONTHS[ch.endMonth]:' onwards')+'\nMonthly savings: '+fmt(Math.abs(ch.monthlyDelta));
   try{
     var r = await fetch('/api/clickup/task',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:name,description:desc,priority:2})});
     var d = await r.json();
     if(d.ok){ ch.clickupUrl=d.taskUrl; ch.status='sent'; saveToServer(); render(); }
     else { window.alert('ClickUp error: '+d.error); }
-  } catch(e){ window.alert('Failed: '+e.message); }
+  }catch(e){ window.alert('Failed: '+e.message); }
+}
+
+function renderScenarioBar(){
+  var any = STATE.scenarioPct && STATE.scenarioPct.some(function(p){return p!==0;});
+  var h = '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">';
+  h += '<span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)">Revenue scenario</span>';
+  [[-25,'-25%'],[-15,'-15%'],[-10,'-10%'],[0,'Base'],[10,'+10%'],[15,'+15%'],[20,'+20%']].forEach(function(p){
+    var active = STATE.scenarioPct && STATE.scenarioPct.every(function(v){return v===p[0];});
+    var isNeg = p[0]<0;
+    h += '<button onclick="setAllScenario('+p[0]+')" style="padding:4px 10px;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;border:1px solid '+(active?(isNeg?'var(--red-b)':'var(--blue-b)'):'var(--b2)')+';background:'+(active?(isNeg?'var(--red-l)':'var(--blue-l)'):'var(--surface)')+';color:'+(active?(isNeg?'var(--red)':'var(--blue)'):'var(--muted)')+'">'+p[1]+'</button>';
+  });
+  if(any) h += '<button onclick="setAllScenario(0)" style="padding:4px 10px;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;border:1px solid var(--b2);background:var(--surface);color:var(--muted)">&#8635; Reset</button>';
+  h += '</div>';
+  return h;
 }
 
 function toggleLaborExpand(i){

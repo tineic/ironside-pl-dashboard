@@ -457,18 +457,18 @@ var CURRENT_MONTHLY  = 47653;      // post-raise actual
 
 // ── FLOOR CREW — minimum viable operation ─────────────────────────────────────
 var STAFF = [
-  {name:'Spencer',  dept:'CS',          base:25.00,  salaried:false, builder:false, raised:false},
-  {name:'Danni',    dept:'CS',          base:20.00,  salaried:false, builder:false, raised:false},
-  {name:'Brett',    dept:'Testing/RMA', base:29.93,  salaried:true,  builder:false, raised:false},
-  {name:'Shawn',    dept:'Testing',     base:22.00,  salaried:false, builder:false, raised:false},
-  {name:'Sterling', dept:'Shipping',    base:22.00,  salaried:false, builder:false, raised:false},
-  {name:'Riley',    dept:'Inventory',   base:25.00,  salaried:false, builder:false, raised:true,  prevBase:24.00},
-  {name:'Juan',     dept:'Detailing',   base:23.00,  salaried:false, builder:false, raised:true,  prevBase:22.00},
-  {name:'Brandon',  dept:'Detailing',   base:20.70,  salaried:false, builder:false, raised:true,  prevBase:20.00},
-  {name:'Mike',     dept:'Building',    base:24.00,  salaried:false, builder:true,  raised:false},
-  {name:'Janelle',  dept:'Building',    base:21.00,  salaried:false, builder:true,  raised:true,  prevBase:20.00},
-  {name:'Eli',      dept:'Building',    base:19.50,  salaried:false, builder:true,  raised:false},
-  {name:'Matt',     dept:'Building',    base:18.00,  salaried:false, builder:true,  raised:false},
+  {id:'s1',  name:'Spencer',  dept:'CS',          base:25.00,  salaried:false, builder:false, raised:false, hrsPerWeek:38},
+  {id:'s2',  name:'Danni',    dept:'CS',          base:20.00,  salaried:false, builder:false, raised:false, hrsPerWeek:38},
+  {id:'s3',  name:'Brett',    dept:'Testing/RMA', base:29.93,  salaried:true,  builder:false, raised:false, hrsPerWeek:38},
+  {id:'s4',  name:'Shawn',    dept:'Testing',     base:22.00,  salaried:false, builder:false, raised:false, hrsPerWeek:38},
+  {id:'s5',  name:'Sterling', dept:'Shipping',    base:22.00,  salaried:false, builder:false, raised:false, hrsPerWeek:38},
+  {id:'s6',  name:'Riley',    dept:'Inventory',   base:25.00,  salaried:false, builder:false, raised:true,  hrsPerWeek:38, prevBase:24.00},
+  {id:'s7',  name:'Juan',     dept:'Detailing',   base:23.00,  salaried:false, builder:false, raised:true,  hrsPerWeek:38, prevBase:22.00},
+  {id:'s8',  name:'Brandon',  dept:'Detailing',   base:20.70,  salaried:false, builder:false, raised:true,  hrsPerWeek:38, prevBase:20.00},
+  {id:'s9',  name:'Mike',     dept:'Building',    base:24.00,  salaried:false, builder:true,  raised:false, hrsPerWeek:38},
+  {id:'s10', name:'Janelle',  dept:'Building',    base:21.00,  salaried:false, builder:true,  raised:true,  hrsPerWeek:38, prevBase:20.00},
+  {id:'s11', name:'Eli',      dept:'Building',    base:19.50,  salaried:false, builder:true,  raised:false, hrsPerWeek:38},
+  {id:'s12', name:'Matt',     dept:'Building',    base:18.00,  salaried:false, builder:true,  raised:false, hrsPerWeek:38},
 ];
 
 STAFF.forEach(function(s){
@@ -2176,8 +2176,6 @@ function renderLaborPage(){
   var delta    = adjCost - minReq;
 
   // ── SCENARIO BAR (always visible) ─────────────────────────────────────────
-  h += renderScenarioBar();
-
   // ── SUMMARY TILES ─────────────────────────────────────────────────────────
   h += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px">';
 

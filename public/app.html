@@ -2143,6 +2143,23 @@ function getMinRequired(dailyUnits, detPct, laidOffNames){
 }
 
 var CAPACITY_LAB = {Building:5.5,Detailing:10,Inventory:40,Testing:45,Shipping:25,CS:12};
+var NS_PER_UNIT  = 2764;   // $/unit — derived from Jan actual ($845,745 / 306 units)
+var DAYS_PER_MO  = 22;     // working days per month
+
+// Derive daily build volume from scenario NS for a given month
+function getDailyUnits(monthIdx){
+  var ns = getNS(monthIdx);
+  if(!ns || ns <= 0) return 10; // floor
+  var unitsPerMonth = ns / NS_PER_UNIT;
+  return Math.max(5, Math.round(unitsPerMonth / DAYS_PER_MO));
+}
+
+// Get avg daily units across Apr-Dec for summary tiles
+function getAvgDailyUnits(){
+  var total = 0;
+  for(var i=3;i<12;i++) total += getDailyUnits(i);
+  return Math.round(total / 9);
+}
 
 // Floor crew names
 var FLOOR_CREW = ['Spencer','Riley','Juan','Mike','Sterling','Brett'];
@@ -2167,11 +2184,11 @@ function getRosterMonthlyCost(){
 // ── LABOR PAGE RENDER ─────────────────────────────────────────────────────────
 function renderLaborPage(){
   var h = '';
-  var mi = 3; // Apr — use for current month tile calcs (first projection month)
-  var laidOff = getLaidOffNames(mi);
+  var mi       = 3; // Apr — use for current month tile calcs (first projection month)
+  var laidOff  = getLaidOffNames(mi);
   var adjCost  = getAdjustedRosterCost(mi);
-  var detPct   = CALC_STATE.detailingPct/100;
-  var units    = CALC_STATE.dailyUnits;
+  var units    = getAvgDailyUnits();  // derived from scenario NS
+  var detPct   = CALC_STATE.detailingPct / 100;
   var minReq   = getMinRequired(units, detPct, laidOff);
   var delta    = adjCost - minReq;
 
@@ -2191,7 +2208,7 @@ function renderLaborPage(){
   h += '<div style="background:var(--surface);border:1px solid var(--blue-b);border-radius:10px;padding:18px 20px">';
   h += '<div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:8px">Minimum Required Cost</div>';
   h += '<div style="font-size:26px;font-weight:700;color:var(--blue);letter-spacing:-.02em">'+fmt(minReq)+'/mo</div>';
-  h += '<div style="font-size:11px;color:var(--muted);margin-top:4px">Floor + staff needed for '+units+' units/day</div>';
+  h += '<div style="font-size:11px;color:var(--muted);margin-top:4px">~'+units+' units/day from scenario</div>';
   h += '</div>';
 
   // Tile 3: Required Cost Delta
@@ -2205,17 +2222,7 @@ function renderLaborPage(){
   h += '</div>';
   h += '</div>';
 
-  // ── VOLUME SLIDER (always visible) ───────────────────────────────────────
-  h += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 20px;margin-bottom:16px;display:flex;align-items:center;gap:16px;flex-wrap:wrap">';
-  h += '<span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)">Daily build volume</span>';
-  h += '<input type="range" min="5" max="80" step="1" value="'+units+'" id="floorUnits" oninput="onFloorUnits()" style="width:220px;accent-color:var(--blue)">';
-  h += '<span style="font-size:14px;font-weight:700;color:var(--text)" id="floorUnitsLbl">'+units+' units/day</span>';
-  h += '<span style="font-size:11px;color:var(--muted)">'+Math.round(units*22)+' units/month est.</span>';
-  h += '<div style="margin-left:auto;display:flex;align-items:center;gap:8px">';
-  h += '<span style="font-size:11px;color:var(--muted)">Detailing %</span>';
-  h += '<input type="range" min="0" max="100" step="5" value="'+Math.round(detPct*100)+'" id="detPct" oninput="onDetPct()" style="width:120px;accent-color:var(--amber)">';
-  h += '<span style="font-size:13px;font-weight:700;color:var(--text)" id="detPctLbl">'+Math.round(detPct*100)+'%</span>';
-  h += '</div></div>';
+
 
   // ── TABS ──────────────────────────────────────────────────────────────────
   var laborTab = STATE.laborTab || 'overview';
@@ -2240,24 +2247,9 @@ function setLaborTab(tab){
   else render();
 }
 
-function onFloorUnits(){
-  var val = parseInt(document.getElementById('floorUnits').value,10);
-  CALC_STATE.dailyUnits = val;
-  var lbl = document.getElementById('floorUnitsLbl');
-  if(lbl) lbl.textContent = val+' units/day';
-  var lbl2 = document.getElementById('floorUnitsLbl');
-  var el = document.getElementById('mainContent');
-  if(el) el.innerHTML = renderLaborPage();
-}
 
-function onDetPct(){
-  var val = parseInt(document.getElementById('detPct').value,10);
-  CALC_STATE.detailingPct = val;
-  var lbl = document.getElementById('detPctLbl');
-  if(lbl) lbl.textContent = val+'%';
-  var el = document.getElementById('mainContent');
-  if(el) el.innerHTML = renderLaborPage();
-}
+
+
 
 // ── TAB 1: LABOR OVERVIEW ─────────────────────────────────────────────────────
 function renderLaborOverviewTab(){
@@ -2272,12 +2264,11 @@ function renderLaborOverviewTab(){
 
   var floorCost = getFloorMonthlyCost();
   var detP = CALC_STATE.detailingPct/100;
-  var units = CALC_STATE.dailyUnits;
 
   var rows = [
     {label:'Projection sheet', fn:function(i){ return getLaborBase(i); }, style:'color:var(--t2)'},
     {label:'Adjusted roster',  fn:function(i){ return i<3?getTotalLabor(i):getAdjustedRosterCost(i); }, style:'color:var(--text);font-weight:600'},
-    {label:'Min required',     fn:function(i){ return i<3?getFloorMonthlyCost():getMinRequired(units,detP,getLaidOffNames(i)); }, style:'color:var(--blue);font-weight:600'},
+    {label:'Min required',     fn:function(i){ return i<3?getFloorMonthlyCost():getMinRequired(getDailyUnits(i),detP,getLaidOffNames(i)); }, style:'color:var(--blue);font-weight:600'},
     {label:'Floor (absolute)', fn:function(i){ return floorCost; }, style:'color:var(--muted)'},
   ];
 
@@ -2296,7 +2287,7 @@ function renderLaborOverviewTab(){
   h += '<td style="font-weight:700">Delta (adj - min)</td>';
   var fyDelta=0;
   for(var i=3;i<12;i++){
-    var d = getAdjustedRosterCost(i) - getMinRequired(units,detP,getLaidOffNames(i));
+    var d = getAdjustedRosterCost(i) - getMinRequired(getDailyUnits(i),detP,getLaidOffNames(i));
     fyDelta+=d;
     h += '<td style="font-weight:700;color:'+(d>0?'var(--red)':'var(--green)')+'">'+fmt(d)+'</td>';
   }

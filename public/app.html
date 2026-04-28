@@ -2524,7 +2524,7 @@ function renderStaffRosterSection(){
     h += '<div style="display:flex;align-items:center;gap:6px;margin-bottom:'+(hasPreview?'6':'0')+'px">';
     h += '<input type="range" min="0" max="38" step="1" value="'+previewHrs+'" ';
     h += 'id="slider_'+p.id+'" ';
-    h += 'oninput="onRosterSlider(&quot;'+p.id+'&quot;,this.value)" ';
+    h += 'data-pid="'+p.id+'" oninput="onRosterSlider(this.dataset.pid,this.value)" ';
     h += 'style="width:110px;accent-color:var(--blue)">';
     h += '<span style="font-size:11px;font-weight:600;min-width:28px" id="sliderLbl_'+p.id+'">'+previewHrs+' h/wk</span>';
     h += '<span id="monthlyCost_'+p.id+'" style="font-size:11px;color:var(--t2);margin-left:4px">'+fmt(previewMonthly)+'/mo</span>';
@@ -2545,8 +2545,8 @@ function renderStaffRosterSection(){
         h += '<option value="'+(i+3)+'"'+(i===8?' selected':'')+'>'+m+'</option>';
       });
       h += '</select>';
-      h += '<button onclick="applyRosterSlider(&quot;'+p.id+'&quot;)" style="padding:3px 8px;background:var(--blue);color:#fff;border:none;border-radius:5px;font-size:10px;font-weight:600;cursor:pointer">Apply</button>';
-      h += '<button onclick="resetRosterSlider(&quot;'+p.id+'&quot;)" style="padding:3px 8px;background:var(--s2);color:var(--muted);border:1px solid var(--border);border-radius:5px;font-size:10px;cursor:pointer">Reset</button>';
+      h += '<button data-pid="'+p.id+'" onclick="applyRosterSlider(this.dataset.pid)" style="padding:3px 8px;background:var(--blue);color:#fff;border:none;border-radius:5px;font-size:10px;font-weight:600;cursor:pointer">Apply</button>';
+      h += '<button data-pid="'+p.id+'" onclick="resetRosterSlider(this.dataset.pid)" style="padding:3px 8px;background:var(--s2);color:var(--muted);border:1px solid var(--border);border-radius:5px;font-size:10px;cursor:pointer">Reset</button>';
       h += '</div>';
     }
     h += '</div>';

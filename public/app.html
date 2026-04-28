@@ -2196,12 +2196,14 @@ function renderLaborPage(){
 
   // ── SCENARIO BAR (always visible) ─────────────────────────────────────────
   // ── SUMMARY TILES ─────────────────────────────────────────────────────────
+  h += '<div style="position:sticky;top:0;z-index:40;background:var(--bg);padding:12px 0 8px;margin:-12px 0 0;">';
   h += '<div id="laborTiles" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px">';
   h += renderLaborTiles();
   h += '</div>';
 
 
 
+  h += '</div>'; // end sticky
   // ── TABS ──────────────────────────────────────────────────────────────────
   var laborTab = STATE.laborTab || 'overview';
   h += '<div style="display:flex;gap:0;border-bottom:2px solid var(--border);margin-bottom:16px">';
@@ -2576,14 +2578,7 @@ function renderStaffRosterSection(){
     h += '</div>'; // end row
   });
 
-  // Total
-  h += '<div style="display:grid;grid-template-columns:90px 90px 70px 70px 200px 1fr;margin-top:6px">';
-  h += '<div style="padding:8px 6px;font-weight:700;font-size:12px">Total</div>';
-  h += '<div></div><div></div><div></div>';
-  h += '<div id="laborTotal" style="padding:8px 6px;font-weight:700;font-size:12px">'+fmt(totalCost)+'/mo</div>';
-  h += '<div></div></div>';
 
-  h += '</div>';
   return h;
 }
 

@@ -2192,40 +2192,12 @@ function renderLaborPage(){
   var h = '';
   var mi       = 3; // Apr — use for current month tile calcs (first projection month)
   var laidOff  = getLaidOffNames(mi);
-  var adjCost  = getAdjustedRosterCost(mi);
-  var units    = getAvgDailyUnits();  // derived from scenario NS
-  var detPct   = CALC_STATE.detailingPct / 100;
-  var minReq   = getMinRequired(units, detPct, laidOff);
-  var delta    = adjCost - minReq;
+  // tiles rendered via renderLaborTiles()
 
   // ── SCENARIO BAR (always visible) ─────────────────────────────────────────
   // ── SUMMARY TILES ─────────────────────────────────────────────────────────
-  h += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px">';
-
-  // Tile 1: Adjusted Roster Cost
-  h += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:18px 20px">';
-  h += '<div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:8px">Adjusted Roster Cost</div>';
-  h += '<div style="font-size:26px;font-weight:700;color:var(--text);letter-spacing:-.02em">'+fmt(adjCost)+'/mo</div>';
-  var savings = getRosterMonthlyCost() - adjCost;
-  h += '<div style="font-size:11px;color:var(--muted);margin-top:4px">'+(savings>0?'<span style="color:var(--green)">-'+fmt(savings)+' from changes</span>':'Base roster — no changes applied')+'</div>';
-  h += '</div>';
-
-  // Tile 2: Minimum Required Cost
-  h += '<div style="background:var(--surface);border:1px solid var(--blue-b);border-radius:10px;padding:18px 20px">';
-  h += '<div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:8px">Minimum Required Cost</div>';
-  h += '<div style="font-size:26px;font-weight:700;color:var(--blue);letter-spacing:-.02em">'+fmt(minReq)+'/mo</div>';
-  h += '<div style="font-size:11px;color:var(--muted);margin-top:4px">~'+units+' units/day from scenario</div>';
-  h += '</div>';
-
-  // Tile 3: Required Cost Delta
-  var deltaClr = delta <= 0 ? 'var(--green)' : 'var(--red)';
-  var deltaBdr = delta <= 0 ? 'var(--green-b)' : 'var(--red-b)';
-  var deltaBg  = delta <= 0 ? 'var(--green-l)' : 'var(--red-l)';
-  h += '<div style="background:'+deltaBg+';border:1px solid '+deltaBdr+';border-radius:10px;padding:18px 20px">';
-  h += '<div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:8px">Required Cost Delta</div>';
-  h += '<div style="font-size:26px;font-weight:700;color:'+deltaClr+';letter-spacing:-.02em">'+(delta>0?'+':'')+fmt(delta)+'/mo</div>';
-  h += '<div style="font-size:11px;color:var(--muted);margin-top:4px">'+(delta>0?'Above minimum — room to reduce':'At or below minimum required')+'</div>';
-  h += '</div>';
+  h += '<div id="laborTiles" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px">';
+  h += renderLaborTiles();
   h += '</div>';
 
 
@@ -2329,6 +2301,44 @@ function setLaborTab(tab){
 
 
 // ── TAB 1: LABOR OVERVIEW ─────────────────────────────────────────────────────
+function renderLaborTiles(){
+  var mi      = 3;
+  var laidOff = getLaidOffNames(mi);
+  var adjCost = getAdjustedRosterCost(mi);
+  var units   = getAvgDailyUnits();
+  var detPct  = CALC_STATE.detailingPct / 100;
+  var minReq  = getMinRequired(units, detPct, laidOff);
+  var delta   = adjCost - minReq;
+  var savings = getRosterMonthlyCost() - adjCost;
+  var h = '';
+
+  // Tile 1: Adjusted Roster Cost
+  h += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:18px 20px">';
+  h += '<div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:8px">Adjusted Roster Cost</div>';
+  h += '<div style="font-size:26px;font-weight:700;color:var(--text);letter-spacing:-.02em">'+fmt(adjCost)+'/mo</div>';
+  h += '<div style="font-size:11px;color:var(--muted);margin-top:4px">'+(savings>0?'<span style="color:var(--green)">-'+fmt(savings)+' from changes</span>':'Base roster — no changes applied')+'</div>';
+  h += '</div>';
+
+  // Tile 2: Minimum Required Cost
+  h += '<div style="background:var(--surface);border:1px solid var(--blue-b);border-radius:10px;padding:18px 20px">';
+  h += '<div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:8px">Minimum Required Cost</div>';
+  h += '<div style="font-size:26px;font-weight:700;color:var(--blue);letter-spacing:-.02em">'+fmt(minReq)+'/mo</div>';
+  h += '<div style="font-size:11px;color:var(--muted);margin-top:4px">~'+units+' units/day from scenario</div>';
+  h += '</div>';
+
+  // Tile 3: Delta
+  var deltaClr = delta<=0?'var(--green)':'var(--red)';
+  var deltaBdr = delta<=0?'var(--green-b)':'var(--red-b)';
+  var deltaBg  = delta<=0?'var(--green-l)':'var(--red-l)';
+  h += '<div style="background:'+deltaBg+';border:1px solid '+deltaBdr+';border-radius:10px;padding:18px 20px">';
+  h += '<div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:8px">Required Cost Delta</div>';
+  h += '<div style="font-size:26px;font-weight:700;color:'+deltaClr+';letter-spacing:-.02em">'+(delta>0?'+':'')+fmt(delta)+'/mo</div>';
+  h += '<div style="font-size:11px;color:var(--muted);margin-top:4px">'+(delta>0?'Above minimum — room to reduce':'At or below minimum required')+'</div>';
+  h += '</div>';
+
+  return h;
+}
+
 function renderLaborOverviewTab(){
   var h = '';
   var floorCost = getFloorMonthlyCost();
@@ -2517,14 +2527,12 @@ function renderStaffRosterSection(){
     h += 'oninput="onRosterSlider(&quot;'+p.id+'&quot;,this.value)" ';
     h += 'style="width:110px;accent-color:var(--blue)">';
     h += '<span style="font-size:11px;font-weight:600;min-width:28px" id="sliderLbl_'+p.id+'">'+previewHrs+' h/wk</span>';
-    if(hasPreview){
-      h += '<span style="font-size:10px;color:var(--green)">-'+fmt(monthly-previewMonthly)+'/mo</span>';
-    }
+    h += '<span id="savingsLbl_'+p.id+'" style="font-size:10px;color:var(--green);display:'+(hasPreview?'':'none')+'">'+(hasPreview?'-'+fmt(monthly-previewMonthly)+'/mo':'')+'</span>';
     h += '</div>';
 
-    // Month range + apply — only shown when slider != default
-    if(hasPreview){
-      h += '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap" id="applyRow_'+p.id+'">';
+    // Month range + apply — always rendered, shown/hidden via JS
+    {
+      h += '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:4px" id="applyRow_'+p.id+'" style="display:'+(hasPreview?'flex':'none')+'">';
       h += '<select id="hrFrom_'+p.id+'" style="padding:3px 6px;font-size:10px;background:var(--s2);border:1px solid var(--border);border-radius:5px;color:var(--text);font-family:inherit">';
       ['Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'].forEach(function(m,i){
         h += '<option value="'+(i+3)+'"'+(i===0?' selected':'')+'>'+m+'</option>';
@@ -2691,36 +2699,47 @@ function toggleAddForm(id){
 }
 
 function onRosterSlider(personId, val){
-  val = parseInt(val);
+  val = parseInt(val, 10);
   if(!STATE.rosterSliders) STATE.rosterSliders = {};
-  var p = STAFF.find(function(p){ return p.id===personId; });
+  var p = STAFF.find(function(s){ return s.id===personId; });
   if(!p) return;
-  var defaultHrs = p.hrsPerWeek||p.hrs||38;
-  // Update label
-  var lbl = document.getElementById('sliderLbl_'+personId);
-  if(lbl) lbl.textContent = val+' h/wk';
-  // If back to default, clear preview
-  if(val === defaultHrs){
-    delete STATE.rosterSliders[personId];
-    // Re-render to hide apply row
-    var el = document.getElementById('content');
-    if(el && STATE.tab==='labor') el.innerHTML = renderLaborPage();
-    return;
-  }
-  // Store preview
-  STATE.rosterSliders[personId] = val;
-  // Show/hide the apply row without full re-render
-  var applyRow = document.getElementById('applyRow_'+personId);
-  if(!applyRow){
-    // Need full re-render to show apply row
-    var el = document.getElementById('content');
-    if(el && STATE.tab==='labor') el.innerHTML = renderLaborPage();
-  }
-  // Update savings label
+  var defaultHrs = parseInt(p.hrsPerWeek||p.hrs||38, 10);
   var loaded = p.base * STAFF_MULTIPLIER;
   var defaultMonthly = loaded * (defaultHrs * 52/12);
   var previewMonthly = loaded * (val * 52/12);
-  var savingsEl = document.querySelector('#slider_'+personId+'~span+span');
+  var savings = defaultMonthly - previewMonthly;
+
+  // Store in state (for tile calculations)
+  if(val === defaultHrs){
+    delete STATE.rosterSliders[personId];
+  } else {
+    STATE.rosterSliders[personId] = val;
+  }
+
+  // Update label inline — no re-render
+  var lbl = document.getElementById('sliderLbl_'+personId);
+  if(lbl) lbl.textContent = val+' h/wk';
+
+  // Update savings label inline
+  var savLbl = document.getElementById('savingsLbl_'+personId);
+  if(savLbl){
+    if(val !== defaultHrs){
+      savLbl.textContent = '-'+fmt(savings)+'/mo';
+      savLbl.style.display = '';
+    } else {
+      savLbl.style.display = 'none';
+    }
+  }
+
+  // Show/hide apply row inline
+  var applyRow = document.getElementById('applyRow_'+personId);
+  if(applyRow){
+    applyRow.style.display = (val !== defaultHrs) ? 'flex' : 'none';
+  }
+
+  // Update summary tiles (Adjusted Cost tile) without re-rendering roster
+  var tilesEl = document.getElementById('laborTiles');
+  if(tilesEl) tilesEl.innerHTML = renderLaborTiles();
 }
 
 function applyRosterSlider(personId){

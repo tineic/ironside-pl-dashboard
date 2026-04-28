@@ -2516,7 +2516,7 @@ function renderStaffRosterSection(){
     h += 'id="slider_'+p.id+'" ';
     h += 'oninput="onRosterSlider(&quot;'+p.id+'&quot;,this.value)" ';
     h += 'style="width:110px;accent-color:var(--blue)">';
-    h += '<span style="font-size:11px;font-weight:600;min-width:28px" id="sliderLbl_'+p.id+'">'+previewHrs+'h</span>';
+    h += '<span style="font-size:11px;font-weight:600;min-width:28px" id="sliderLbl_'+p.id+'">'+previewHrs+' h/wk</span>';
     if(hasPreview){
       h += '<span style="font-size:10px;color:var(--green)">-'+fmt(monthly-previewMonthly)+'/mo</span>';
     }
@@ -2698,7 +2698,7 @@ function onRosterSlider(personId, val){
   var defaultHrs = p.hrsPerWeek||p.hrs||38;
   // Update label
   var lbl = document.getElementById('sliderLbl_'+personId);
-  if(lbl) lbl.textContent = val+'h';
+  if(lbl) lbl.textContent = val+' h/wk';
   // If back to default, clear preview
   if(val === defaultHrs){
     delete STATE.rosterSliders[personId];

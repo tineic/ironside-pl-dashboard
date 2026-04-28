@@ -226,6 +226,7 @@ input[type=file]{display:none}
 .nav-badge{margin-left:auto;background:var(--orange);color:#fff;font-size:9px;font-weight:700;padding:1px 6px;border-radius:10px}
 .main{padding:24px 28px;overflow-y:auto;background:var(--bg)}
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 </head>
 <body>
 <div class="shell">
@@ -2240,11 +2241,44 @@ function renderLaborPage(){
   return h;
 }
 
+function renderLaborChart(){
+  setTimeout(function(){
+    var el = document.getElementById('laborBreakdownChart');
+    if(!el) return;
+    if(!window.Chart){ setTimeout(renderLaborChart, 300); return; }
+    if(el._chartInstance) el._chartInstance.destroy();
+  var isDark = document.documentElement.getAttribute('data-theme')==='dark';
+  var gc = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)';
+  var tc = isDark ? '#9ca3af' : '#667085';
+  var chart = new Chart(el, {
+    type: 'bar',
+    data: {
+      labels: MONTHS,
+      datasets: [
+        {label:'Emp. Labor & Taxes', data:MONTHS.map(function(_,i){return D.labor_row118[i]||0;}), backgroundColor:'#1570ef', borderRadius:2},
+        {label:'Benefits',           data:MONTHS.map(function(_,i){return D.labor_row119[i]||0;}), backgroundColor:'#60a5fa', borderRadius:2},
+        {label:'Contractors',        data:MONTHS.map(function(_,i){return D.labor_row120[i]||0;}), backgroundColor:'#93c5fd', borderRadius:2},
+        {label:'Other',              data:MONTHS.map(function(_,i){return D.labor_row121[i]||0;}), backgroundColor:'#bfdbfe', borderRadius:2},
+      ]
+    },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{display:false}, tooltip:{callbacks:{label:function(ctx){ return ' '+ctx.dataset.label+': $'+Math.round(ctx.raw/1000)+'k'; }}} },
+      scales:{
+        x:{stacked:true, grid:{display:false}, ticks:{color:tc,font:{size:9}}, border:{display:false}},
+        y:{stacked:true, grid:{color:gc}, ticks:{color:tc,font:{size:9},callback:function(v){return '$'+Math.round(v/1000)+'k';}}, border:{display:false}}
+      }
+    }
+  });
+    el._chartInstance = chart;
+  }, 150);
+}
 function setLaborTab(tab){
   STATE.laborTab = tab;
-  var el = document.getElementById('mainContent');
+  var el = document.getElementById('content');
   if(el) el.innerHTML = renderLaborPage();
   else render();
+  renderLaborChart();
 }
 
 
@@ -2372,21 +2406,7 @@ function renderLaborOverviewTab(){
   h += '<div style="padding:6px 3px;text-align:right;font-size:11px;font-weight:600;border-top:1px solid var(--b2)">'+fmtK(grandTotal)+'</div>';
   h += '</div></div>'; // end table + overflow
 
-  h += '<script>'+
-    '(function(){'+
-    'var el=document.getElementById("laborBreakdownChart");'+
-    'if(!el||!window.Chart) return;'+
-    'var isDark=document.documentElement.getAttribute("data-theme")==="dark";'+
-    'var gc=isDark?"rgba(255,255,255,0.06)":"rgba(0,0,0,0.06)";'+
-    'var tc=isDark?"#9ca3af":"#667085";'+
-    'new Chart(el,{type:"bar",data:{labels:'+JSON.stringify(MONTHS)+',datasets:['+
-    '{label:"Emp. Labor & Taxes",data:['+Array.from({length:12},function(_,i){return D.labor_row118[i]||0;})+'],backgroundColor:"#1570ef",borderRadius:2},'+
-    '{label:"Benefits",data:['+Array.from({length:12},function(_,i){return D.labor_row119[i]||0;})+'],backgroundColor:"#60a5fa",borderRadius:2},'+
-    '{label:"Contractors",data:['+Array.from({length:12},function(_,i){return D.labor_row120[i]||0;})+'],backgroundColor:"#93c5fd",borderRadius:2},'+
-    '{label:"Other",data:['+Array.from({length:12},function(_,i){return D.labor_row121[i]||0;})+'],backgroundColor:"#bfdbfe",borderRadius:2}'+
-    ']},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){return " "+ctx.dataset.label+": $"+Math.round(ctx.raw/1000)+"k";}}}},scales:{x:{stacked:true,grid:{display:false},ticks:{color:tc,font:{size:9}},border:{display:false}},y:{stacked:true,grid:{color:gc},ticks:{color:tc,font:{size:9},callback:function(v){return "$"+Math.round(v/1000)+"k";}},border:{display:false}}}}});'+
-    '})();'+
-    '<\/script>';
+  h += '<div id="laborChartPending" style="display:none"></div>';
 
   h += '</div>'; // end breakdown card
   return h;
@@ -2631,9 +2651,10 @@ function toggleSection(id){
   STATE.panelOpen[id] = !STATE.panelOpen[id];
   // Re-render just the labor page content, not the whole app
   if(STATE.tab === 'labor'){
-    var el = document.getElementById('mainContent');
+    var el = document.getElementById('content');
     if(el) el.innerHTML = renderLaborPage();
     else render();
+    renderLaborChart();
   } else {
     render();
   }
@@ -2660,6 +2681,7 @@ function render(){
   else if(STATE.tab==='labor')      h=renderLaborPage();
   else if(STATE.tab==='actions')    h=renderActionsPage();
   document.getElementById('content').innerHTML=h;
+  if(STATE.tab==='labor') renderLaborChart();
   // After labor page renders, populate utilization results
 
 }

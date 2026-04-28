@@ -2241,6 +2241,44 @@ function renderLaborPage(){
   return h;
 }
 
+function renderLaborCompChart(){
+  setTimeout(function(){
+    var el = document.getElementById('laborCompChart');
+    if(!el) return;
+    if(!window.Chart){ setTimeout(renderLaborCompChart, 300); return; }
+    if(el._chartInstance) el._chartInstance.destroy();
+    var isDark = document.documentElement.getAttribute('data-theme')==='dark';
+    var gc = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)';
+    var tc = isDark ? '#9ca3af' : '#667085';
+    var detP = CALC_STATE.detailingPct / 100;
+    var labels = MONTHS.slice(3);
+    var projData    = labels.map(function(_,i){ return getLaborBase(i+3); });
+    var adjData     = labels.map(function(_,i){ return getAdjustedRosterCost(i+3); });
+    var minReqData  = labels.map(function(_,i){ return getMinRequired(getDailyUnits(i+3), detP, getLaidOffNames(i+3)); });
+    var floorData   = labels.map(function(){ return getFloorMonthlyCost(); });
+    el._chartInstance = new Chart(el, {
+      type: 'line',
+      data: {
+        labels: labels,
+        datasets: [
+          {label:'Projection sheet', data:projData,   borderColor:'#888780', borderWidth:1.5, borderDash:[4,3], pointRadius:3, fill:false, tension:0.3},
+          {label:'Adjusted roster',  data:adjData,    borderColor:'#101828', borderWidth:2,   pointRadius:3,   fill:false, tension:0.3},
+          {label:'Min required',     data:minReqData, borderColor:'#1570ef', borderWidth:2,   pointRadius:3,   fill:false, tension:0.3},
+          {label:'Floor (absolute)', data:floorData,  borderColor:'#b4b2a9', borderWidth:1,   borderDash:[2,4], pointRadius:0, fill:false},
+        ]
+      },
+      options: {
+        responsive:true, maintainAspectRatio:false,
+        plugins:{ legend:{display:false}, tooltip:{callbacks:{label:function(ctx){ return ' '+ctx.dataset.label+': $'+Math.round(ctx.raw/1000)+'k'; }}} },
+        scales:{
+          x:{ grid:{display:false}, ticks:{color:tc, font:{size:9}}, border:{display:false} },
+          y:{ grid:{color:gc}, ticks:{color:tc, font:{size:9}, callback:function(v){return '$'+Math.round(v/1000)+'k';}}, border:{display:false} }
+        }
+      }
+    });
+  }, 150);
+}
+
 function renderLaborChart(){
   setTimeout(function(){
     var el = document.getElementById('laborBreakdownChart');
@@ -2278,7 +2316,7 @@ function setLaborTab(tab){
   var el = document.getElementById('content');
   if(el) el.innerHTML = renderLaborPage();
   else render();
-  renderLaborChart();
+  renderLaborChart(); renderLaborCompChart();
 }
 
 
@@ -2302,6 +2340,9 @@ function renderLaborOverviewTab(){
   // ── CHART + COMPARISON TABLE ──────────────────────────────────────────────
   h += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px 20px;margin-bottom:16px">';
   h += '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:14px">Labor — Apr–Dec comparison</div>';
+
+  // Chart canvas for comparison
+  h += '<div style="position:relative;height:160px;margin-bottom:16px"><canvas id="laborCompChart" role="img" aria-label="Labor comparison chart Apr through Dec">Labor cost comparison by line</canvas></div>';
 
   // Legend
   h += '<div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:12px;font-size:11px;color:var(--t2)">';

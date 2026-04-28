@@ -2740,6 +2740,7 @@ function onRosterSlider(personId, val){
   // Update summary tiles (Adjusted Cost tile) without re-rendering roster
   var tilesEl = document.getElementById('laborTiles');
   if(tilesEl) tilesEl.innerHTML = renderLaborTiles();
+  updateLaborFloat();
 }
 
 function applyRosterSlider(personId){
@@ -2984,6 +2985,37 @@ function uploadProjection(event){
 // ── INIT ──────────────────────────────────────────────────────────────────────
 loadPinsLocally();
 buildScenarioTable();
+
+// Labor float bar scroll detection
+document.querySelector('.main').addEventListener('scroll', function(){
+  var laborTiles = document.getElementById('laborTiles');
+  var floatBar   = document.getElementById('laborFloat');
+  if(!laborTiles || !floatBar) return;
+  if(STATE.tab !== 'labor'){ floatBar.style.display='none'; return; }
+  var rect = laborTiles.getBoundingClientRect();
+  if(rect.bottom < 60){
+    floatBar.style.display = 'block';
+    updateLaborFloat();
+  } else {
+    floatBar.style.display = 'none';
+  }
+});
+
+function updateLaborFloat(){
+  var mi = 3;
+  var adj    = getAdjustedRosterCost(mi);
+  var minReq = getMinRequired(getAvgDailyUnits(), CALC_STATE.detailingPct/100, getLaidOffNames(mi));
+  var delta  = adj - minReq;
+  var adjEl  = document.getElementById('floatAdj');
+  var minEl  = document.getElementById('floatMin');
+  var delEl  = document.getElementById('floatDelta');
+  if(adjEl) adjEl.textContent = fmt(adj)+'/mo';
+  if(minEl) minEl.textContent = fmt(minReq)+'/mo';
+  if(delEl){
+    delEl.textContent = (delta>0?'+':'')+fmt(delta)+'/mo';
+    delEl.style.color = delta>0 ? 'var(--red)' : 'var(--green)';
+  }
+}
 
 // Load saved state from server, then render
 (async function(){

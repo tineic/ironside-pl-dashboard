@@ -2527,6 +2527,7 @@ function renderStaffRosterSection(){
     h += 'oninput="onRosterSlider(&quot;'+p.id+'&quot;,this.value)" ';
     h += 'style="width:110px;accent-color:var(--blue)">';
     h += '<span style="font-size:11px;font-weight:600;min-width:28px" id="sliderLbl_'+p.id+'">'+previewHrs+' h/wk</span>';
+    h += '<span id="monthlyCost_'+p.id+'" style="font-size:11px;color:var(--t2);margin-left:4px">'+fmt(previewMonthly)+'/mo</span>';
     h += '<span id="savingsLbl_'+p.id+'" style="font-size:10px;color:var(--green);display:'+(hasPreview?'':'none')+'">'+(hasPreview?'-'+fmt(monthly-previewMonthly)+'/mo':'')+'</span>';
     h += '</div>';
 
@@ -2719,6 +2720,9 @@ function onRosterSlider(personId, val){
   // Update label inline — no re-render
   var lbl = document.getElementById('sliderLbl_'+personId);
   if(lbl) lbl.textContent = val+' h/wk';
+
+  var costLbl = document.getElementById('monthlyCost_'+personId);
+  if(costLbl) costLbl.textContent = fmt(previewMonthly)+'/mo';
 
   // Update savings label inline
   var savLbl = document.getElementById('savingsLbl_'+personId);

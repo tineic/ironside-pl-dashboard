@@ -2316,7 +2316,7 @@ function setLaborTab(tab){
   var el = document.getElementById('content');
   if(el) el.innerHTML = renderLaborPage();
   else render();
-  renderLaborChart(); renderLaborCompChart();
+  renderLaborChart();
 }
 
 
@@ -2340,9 +2340,6 @@ function renderLaborOverviewTab(){
   // ── CHART + COMPARISON TABLE ──────────────────────────────────────────────
   h += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px 20px;margin-bottom:16px">';
   h += '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:14px">Labor — Apr–Dec comparison</div>';
-
-  // Chart canvas for comparison
-  h += '<div style="position:relative;height:160px;margin-bottom:16px"><canvas id="laborCompChart" role="img" aria-label="Labor comparison chart Apr through Dec">Labor cost comparison by line</canvas></div>';
 
   // Legend
   h += '<div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:12px;font-size:11px;color:var(--t2)">';

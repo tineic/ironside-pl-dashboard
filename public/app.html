@@ -2254,89 +2254,144 @@ function setLaborTab(tab){
 // ── TAB 1: LABOR OVERVIEW ─────────────────────────────────────────────────────
 function renderLaborOverviewTab(){
   var h = '';
-  // Apr–Dec comparison table: Projection vs Adjusted vs Min Required vs Floor
-  h += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px 20px;margin-bottom:16px">';
-  h += '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:14px">Labor — Apr–Dec Comparison</div>';
-  h += '<div style="overflow-x:auto"><table class="tbl" style="font-size:11px"><thead><tr>';
-  h += '<th style="text-align:left;min-width:140px">Line</th>';
-  for(var i=3;i<12;i++) h += '<th>'+MONTHS[i]+'</th>';
-  h += '<th>Total</th></tr></thead><tbody>';
-
   var floorCost = getFloorMonthlyCost();
   var detP = CALC_STATE.detailingPct/100;
 
-  var rows = [
-    {label:'Projection sheet', fn:function(i){ return getLaborBase(i); }, style:'color:var(--t2)'},
-    {label:'Adjusted roster',  fn:function(i){ return i<3?getTotalLabor(i):getAdjustedRosterCost(i); }, style:'color:var(--text);font-weight:600'},
-    {label:'Min required',     fn:function(i){ return i<3?getFloorMonthlyCost():getMinRequired(getDailyUnits(i),detP,getLaidOffNames(i)); }, style:'color:var(--blue);font-weight:600'},
-    {label:'Floor (absolute)', fn:function(i){ return floorCost; }, style:'color:var(--muted)'},
+  // Shared cell style helpers
+  function fmtK(v){ return v===0||v===null||v===undefined ? '$0' : '$'+Math.round(Math.abs(v)/1000)+'k'; }
+  function cell(val, cls, extra){
+    cls = cls||''; extra = extra||'';
+    return '<div style="padding:5px 3px;text-align:right;font-size:11px;border-bottom:0.5px solid var(--border);'+extra+'" class="'+cls+'">'+val+'</div>';
+  }
+  function hdr(val){ return '<div style="padding:5px 3px;text-align:right;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);border-bottom:1px solid var(--b2)">'+val+'</div>'; }
+
+  // ── CHART + COMPARISON TABLE ──────────────────────────────────────────────
+  h += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px 20px;margin-bottom:16px">';
+  h += '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:14px">Labor — Apr–Dec comparison</div>';
+
+  // Legend
+  h += '<div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:12px;font-size:11px;color:var(--t2)">';
+  [['#667085','Projection sheet'],['var(--text)','Adjusted roster'],['var(--blue)','Min required'],['var(--m2)','Floor (absolute)']].forEach(function(l){
+    h += '<span style="display:flex;align-items:center;gap:5px"><span style="width:8px;height:8px;border-radius:2px;background:'+l[0]+';flex-shrink:0"></span>'+l[1]+'</span>';
+  });
+  h += '</div>';
+
+  // Grid header
+  var cols = 'grid-template-columns:130px repeat(9,1fr) 80px';
+  h += '<div style="display:grid;'+cols+'">';
+  h += '<div style="padding:5px 0;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);border-bottom:1px solid var(--b2)">Line</div>';
+  for(var i=3;i<12;i++) h += hdr(MONTHS[i]);
+  h += hdr('Total');
+  h += '</div>';
+
+  // Rows
+  var compRows = [
+    {label:'Projection sheet', fn:function(i){return getLaborBase(i);}, color:'color:var(--muted)', fw:''},
+    {label:'Adjusted roster',  fn:function(i){return i<3?getTotalLabor(i):getAdjustedRosterCost(i);}, color:'color:var(--text)', fw:'font-weight:600'},
+    {label:'Min required',     fn:function(i){return i<3?getFloorMonthlyCost():getMinRequired(getDailyUnits(i),detP,getLaidOffNames(i));}, color:'color:var(--blue)', fw:'font-weight:600'},
+    {label:'Floor (absolute)', fn:function(i){return floorCost;}, color:'color:var(--m2)', fw:'font-size:10px'},
   ];
 
-  rows.forEach(function(row){
+  compRows.forEach(function(row){
     var fy=0; for(var i=3;i<12;i++) fy+=(row.fn(i)||0);
-    h += '<tr><td style="'+row.style+'">'+row.label+'</td>';
+    h += '<div style="display:grid;'+cols+'">';
+    h += '<div style="padding:5px 0;font-size:11px;border-bottom:0.5px solid var(--border);'+row.color+';'+row.fw+'">'+row.label+'</div>';
     for(var i=3;i<12;i++){
-      var v=row.fn(i)||0;
-      h += '<td style="'+row.style+'">'+fmt(v)+'</td>';
+      h += '<div style="padding:5px 3px;text-align:right;font-size:11px;border-bottom:0.5px solid var(--border);'+row.color+';'+row.fw+'">'+fmtK(row.fn(i))+'</div>';
     }
-    h += '<td style="'+row.style+';font-weight:700">'+fmt(fy)+'</td></tr>';
+    h += '<div style="padding:5px 3px;text-align:right;font-size:11px;border-bottom:0.5px solid var(--border);'+row.color+';font-weight:600">'+fmtK(fy)+'</div>';
+    h += '</div>';
   });
 
-  // Delta row: adjusted minus min required
-  h += '<tr style="border-top:2px solid var(--border)">';
-  h += '<td style="font-weight:700">Delta (adj - min)</td>';
+  // Delta row
+  h += '<div style="display:grid;'+cols+';margin-top:4px">';
+  h += '<div style="padding:6px 0;font-size:11px;font-weight:600;border-top:1px solid var(--b2)">Delta (adj − min)</div>';
   var fyDelta=0;
   for(var i=3;i<12;i++){
     var d = getAdjustedRosterCost(i) - getMinRequired(getDailyUnits(i),detP,getLaidOffNames(i));
     fyDelta+=d;
-    h += '<td style="font-weight:700;color:'+(d>0?'var(--red)':'var(--green)')+'">'+fmt(d)+'</td>';
+    var clr = d>0?'color:var(--red)':'color:var(--green)';
+    h += '<div style="padding:6px 3px;text-align:right;font-size:11px;font-weight:600;border-top:1px solid var(--b2);'+clr+'">'+(d>0?'+':'')+fmtK(d)+'</div>';
   }
-  h += '<td style="font-weight:700;color:'+(fyDelta>0?'var(--red)':'var(--green)')+'">'+fmt(fyDelta)+'</td>';
-  h += '</tr>';
+  h += '<div style="padding:6px 3px;text-align:right;font-size:11px;font-weight:600;border-top:1px solid var(--b2);'+(fyDelta>0?'color:var(--red)':'color:var(--green)')+'">'+(fyDelta>0?'+':'')+fmtK(fyDelta)+'</div>';
+  h += '</div>';
+  h += '</div>'; // end comparison card
 
-  h += '</tbody></table></div></div>';
-
-  // Labor breakdown from projection sheet rows
+  // ── BREAKDOWN CHART + TABLE ───────────────────────────────────────────────
   h += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px 20px">';
-  h += '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:14px">Projection Sheet Labor Breakdown — Actuals vs Projection</div>';
-  h += '<div style="overflow-x:auto"><table class="tbl" style="font-size:11px"><thead><tr>';
-  h += '<th style="text-align:left">Category</th>';
-  for(var i=0;i<12;i++) h += '<th style="'+(i<=D.act_thru?'color:var(--text)':'')+'">'+MONTHS[i]+'</th>';
-  h += '<th>Total</th></tr></thead><tbody>';
+  h += '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:14px">Projection sheet labor breakdown</div>';
 
-  var laborRows = [
-    {label:'Employee Labor & Taxes', fn:function(i){ return D.labor_row118[i]||0; }},
-    {label:'Benefits (401k+Health)', fn:function(i){ return D.labor_row119[i]||0; }},
-    {label:'Creative Contractors',   fn:function(i){ return D.labor_row120[i]||0; }},
-    {label:'Other Labor',            fn:function(i){ return D.labor_row121[i]||0; }},
+  // Stacked bar chart
+  h += '<div style="display:flex;gap:12px;margin-bottom:12px;font-size:11px;color:var(--t2)">';
+  [['#1570ef','Emp. Labor & Taxes'],['#60a5fa','Benefits'],['#93c5fd','Contractors'],['#bfdbfe','Other']].forEach(function(l){
+    h += '<span style="display:flex;align-items:center;gap:4px"><span style="width:8px;height:8px;border-radius:2px;background:'+l[0]+';flex-shrink:0"></span>'+l[1]+'</span>';
+  });
+  h += '</div>';
+  h += '<div style="position:relative;height:140px;margin-bottom:16px"><canvas id="laborBreakdownChart" role="img" aria-label="Stacked monthly labor cost breakdown Jan through Dec">Monthly labor breakdown by category</canvas></div>';
+
+  // Table
+  var cols2 = 'grid-template-columns:150px repeat(12,1fr) 80px';
+  h += '<div style="overflow-x:auto"><div style="display:grid;'+cols2+';min-width:900px">';
+  h += '<div style="padding:5px 0;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);border-bottom:1px solid var(--b2)">Category</div>';
+  for(var i=0;i<12;i++){
+    var isAct = i<=D.act_thru;
+    h += '<div style="padding:5px 3px;text-align:right;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:'+(isAct?'var(--t2)':'var(--muted)')+';border-bottom:1px solid var(--b2)">'+MONTHS[i]+'</div>';
+  }
+  h += '<div style="padding:5px 3px;text-align:right;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);border-bottom:1px solid var(--b2)">Total</div>';
+  h += '</div>';
+
+  var labRows = [
+    {label:'Emp. Labor & Taxes', fn:function(i){return D.labor_row118[i]||0;}},
+    {label:'Benefits (401k+Health)', fn:function(i){return D.labor_row119[i]||0;}},
+    {label:'Creative Contractors',   fn:function(i){return D.labor_row120[i]||0;}},
+    {label:'Other Labor',            fn:function(i){return D.labor_row121[i]||0;}},
   ];
 
-  laborRows.forEach(function(row){
+  labRows.forEach(function(row){
     var fy=0; for(var i=0;i<12;i++) fy+=(row.fn(i)||0);
-    h += '<tr><td>'+row.label+'</td>';
+    h += '<div style="display:grid;'+cols2+';min-width:900px">';
+    h += '<div style="padding:5px 0;font-size:11px;border-bottom:0.5px solid var(--border)">'+row.label+'</div>';
     for(var i=0;i<12;i++){
-      var v=row.fn(i)||0;
-      var act = i<=D.act_thru ? 'color:var(--text)' : '';
-      h += '<td style="'+act+'">'+fmt(v)+'</td>';
+      var v=row.fn(i)||0, isAct=i<=D.act_thru;
+      h += '<div style="padding:5px 3px;text-align:right;font-size:11px;border-bottom:0.5px solid var(--border);color:'+(isAct?'var(--text)':'var(--muted)')+'">'+fmtK(v)+'</div>';
     }
-    h += '<td style="font-weight:700">'+fmt(fy)+'</td></tr>';
+    h += '<div style="padding:5px 3px;text-align:right;font-size:11px;font-weight:600;border-bottom:0.5px solid var(--border)">'+fmtK(fy)+'</div>';
+    h += '</div>';
   });
 
   // Total row
-  var totals = [];
-  for(var i=0;i<12;i++) totals.push(laborRows.reduce(function(s,r){return s+(r.fn(i)||0);},0));
-  var grandTotal = totals.reduce(function(a,b){return a+b;},0);
-  h += '<tr style="border-top:2px solid var(--border)"><td style="font-weight:700">Total Labor</td>';
-  totals.forEach(function(v,i){
-    h += '<td style="font-weight:700;'+(i<=D.act_thru?'color:var(--text)':'')+'">'+fmt(v)+'</td>';
-  });
-  h += '<td style="font-weight:700">'+fmt(grandTotal)+'</td></tr>';
-  h += '</tbody></table></div></div>';
+  h += '<div style="display:grid;'+cols2+';min-width:900px">';
+  h += '<div style="padding:6px 0;font-size:11px;font-weight:600;border-top:1px solid var(--b2)">Total Labor</div>';
+  var grandTotal=0;
+  for(var i=0;i<12;i++){
+    var tot = labRows.reduce(function(s,r){return s+(r.fn(i)||0);},0);
+    grandTotal+=tot;
+    var isAct=i<=D.act_thru;
+    h += '<div style="padding:6px 3px;text-align:right;font-size:11px;font-weight:600;border-top:1px solid var(--b2);color:'+(isAct?'var(--text)':'var(--muted)')+'">'+fmtK(tot)+'</div>';
+  }
+  h += '<div style="padding:6px 3px;text-align:right;font-size:11px;font-weight:600;border-top:1px solid var(--b2)">'+fmtK(grandTotal)+'</div>';
+  h += '</div></div>'; // end table + overflow
 
+  h += '<script>'+
+    '(function(){'+
+    'var el=document.getElementById("laborBreakdownChart");'+
+    'if(!el||!window.Chart) return;'+
+    'var isDark=document.documentElement.getAttribute("data-theme")==="dark";'+
+    'var gc=isDark?"rgba(255,255,255,0.06)":"rgba(0,0,0,0.06)";'+
+    'var tc=isDark?"#9ca3af":"#667085";'+
+    'new Chart(el,{type:"bar",data:{labels:'+JSON.stringify(MONTHS)+',datasets:['+
+    '{label:"Emp. Labor & Taxes",data:['+Array.from({length:12},function(_,i){return D.labor_row118[i]||0;})+'],backgroundColor:"#1570ef",borderRadius:2},'+
+    '{label:"Benefits",data:['+Array.from({length:12},function(_,i){return D.labor_row119[i]||0;})+'],backgroundColor:"#60a5fa",borderRadius:2},'+
+    '{label:"Contractors",data:['+Array.from({length:12},function(_,i){return D.labor_row120[i]||0;})+'],backgroundColor:"#93c5fd",borderRadius:2},'+
+    '{label:"Other",data:['+Array.from({length:12},function(_,i){return D.labor_row121[i]||0;})+'],backgroundColor:"#bfdbfe",borderRadius:2}'+
+    ']},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){return " "+ctx.dataset.label+": $"+Math.round(ctx.raw/1000)+"k";}}}},scales:{x:{stacked:true,grid:{display:false},ticks:{color:tc,font:{size:9}},border:{display:false}},y:{stacked:true,grid:{color:gc},ticks:{color:tc,font:{size:9},callback:function(v){return "$"+Math.round(v/1000)+"k";}},border:{display:false}}}}});'+
+    '})();'+
+    '<\/script>';
+
+  h += '</div>'; // end breakdown card
   return h;
 }
 
-// ── TAB 2: STAFF ROSTER ───────────────────────────────────────────────────────
 function renderLaborRosterTab(){
   var h = '';
   h += renderStaffRosterSection();

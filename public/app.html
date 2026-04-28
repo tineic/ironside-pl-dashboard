@@ -2196,8 +2196,9 @@ function renderLaborPage(){
 
   // ── SCENARIO BAR (always visible) ─────────────────────────────────────────
   // ── SUMMARY TILES ─────────────────────────────────────────────────────────
-  h += '<div style="position:sticky;top:0;z-index:40;background:var(--bg);padding:12px 0 8px;margin:-12px 0 0;">';
-  h += '<div id="laborTiles" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px">';
+  h += '<div style="position:sticky;top:-24px;z-index:40;background:var(--bg);padding:24px 0 12px;margin:-24px -28px 0;padding-left:28px;padding-right:28px;">';
+  h += renderScenarioBar();
+  h += '<div id="laborTiles" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:0">';
   h += renderLaborTiles();
   h += '</div>';
 

@@ -2536,7 +2536,7 @@ function renderStaffRosterSection(){
 
     // Month range + apply — always rendered, shown/hidden via JS
     {
-      h += '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:4px" id="applyRow_'+p.id+'" style="display:'+(hasPreview?'flex':'none')+'">';
+      h += '<div id="applyRow_'+p.id+'" style="display:'+(hasPreview?'flex':'none')+';align-items:center;gap:6px;flex-wrap:wrap;margin-top:4px">';
       h += '<select id="hrFrom_'+p.id+'" style="padding:3px 6px;font-size:10px;background:var(--s2);border:1px solid var(--border);border-radius:5px;color:var(--text);font-family:inherit">';
       ['Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'].forEach(function(m,i){
         h += '<option value="'+(i+3)+'"'+(i===0?' selected':'')+'>'+m+'</option>';
@@ -2987,19 +2987,23 @@ loadPinsLocally();
 buildScenarioTable();
 
 // Labor float bar scroll detection
-document.querySelector('.main').addEventListener('scroll', function(){
-  var laborTiles = document.getElementById('laborTiles');
-  var floatBar   = document.getElementById('laborFloat');
-  if(!laborTiles || !floatBar) return;
-  if(STATE.tab !== 'labor'){ floatBar.style.display='none'; return; }
-  var rect = laborTiles.getBoundingClientRect();
-  if(rect.bottom < 60){
-    floatBar.style.display = 'block';
-    updateLaborFloat();
-  } else {
-    floatBar.style.display = 'none';
-  }
-});
+function attachLaborScroll(){
+  var mainEl = document.querySelector('.main');
+  if(!mainEl) return;
+  mainEl.addEventListener('scroll', function(){
+    var laborTiles = document.getElementById('laborTiles');
+    var floatBar   = document.getElementById('laborFloat');
+    if(!laborTiles || !floatBar) return;
+    if(STATE.tab !== 'labor'){ floatBar.style.display='none'; return; }
+    var rect = laborTiles.getBoundingClientRect();
+    if(rect.bottom < 60){
+      floatBar.style.display = 'block';
+      updateLaborFloat();
+    } else {
+      floatBar.style.display = 'none';
+    }
+  });
+}
 
 function updateLaborFloat(){
   var mi = 3;
@@ -3032,6 +3036,7 @@ function updateLaborFloat(){
     }
   } catch(e) { console.log('Server load failed, using local state'); }
   render();
+  attachLaborScroll();
 })();
 </script>
 </body>

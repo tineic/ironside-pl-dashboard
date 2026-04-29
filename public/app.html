@@ -2997,25 +2997,24 @@ function uploadProjection(event){
 loadPinsLocally();
 buildScenarioTable();
 
-// Labor float bar — IntersectionObserver approach
-var _laborObserver = null;
+// Labor float bar — polling approach
+var _laborPoll = null;
 function attachLaborScroll(){
-  if(_laborObserver){ _laborObserver.disconnect(); _laborObserver=null; }
+  window.addEventListener('scroll', checkLaborFloat, true);
+}
+function checkLaborFloat(){
+  var floatBar = document.getElementById('laborFloat');
+  if(!floatBar) return;
+  if(STATE.tab !== 'labor'){ floatBar.style.display='none'; return; }
   var laborTiles = document.getElementById('laborTiles');
-  var floatBar   = document.getElementById('laborFloat');
-  if(!laborTiles || !floatBar) return;
-  _laborObserver = new IntersectionObserver(function(entries){
-    entries.forEach(function(entry){
-      if(STATE.tab !== 'labor'){ floatBar.style.display='none'; return; }
-      if(!entry.isIntersecting){
-        floatBar.style.display = 'block';
-        updateLaborFloat();
-      } else {
-        floatBar.style.display = 'none';
-      }
-    });
-  }, { threshold: 0, rootMargin: '0px' });
-  _laborObserver.observe(laborTiles);
+  if(!laborTiles){ floatBar.style.display='none'; return; }
+  var rect = laborTiles.getBoundingClientRect();
+  if(rect.bottom < 52){
+    floatBar.style.display = 'block';
+    updateLaborFloat();
+  } else {
+    floatBar.style.display = 'none';
+  }
 }
 
 function updateLaborFloat(){

@@ -2307,7 +2307,6 @@ function setLaborTab(tab){
   if(el) el.innerHTML = renderLaborPage();
   else render();
   renderLaborChart();
-  setTimeout(attachLaborScroll, 100);
 }
 
 
@@ -2751,7 +2750,6 @@ function onRosterSlider(personId, val){
   // Update summary tiles (Adjusted Cost tile) without re-rendering roster
   var tilesEl = document.getElementById('laborTiles');
   if(tilesEl) tilesEl.innerHTML = renderLaborTiles();
-  updateLaborFloat();
 }
 
 function applyRosterSlider(personId){
@@ -2997,41 +2995,7 @@ function uploadProjection(event){
 loadPinsLocally();
 buildScenarioTable();
 
-// Labor float bar — polling approach
-var _laborPoll = null;
-function attachLaborScroll(){
-  window.addEventListener('scroll', checkLaborFloat, true);
-}
-function checkLaborFloat(){
-  var floatBar = document.getElementById('laborFloat');
-  if(!floatBar) return;
-  if(STATE.tab !== 'labor'){ floatBar.style.display='none'; return; }
-  var laborTiles = document.getElementById('laborTiles');
-  if(!laborTiles){ floatBar.style.display='none'; return; }
-  var rect = laborTiles.getBoundingClientRect();
-  if(rect.bottom < 52){
-    floatBar.style.display = 'block';
-    updateLaborFloat();
-  } else {
-    floatBar.style.display = 'none';
-  }
-}
 
-function updateLaborFloat(){
-  var mi = 3;
-  var adj    = getAdjustedRosterCost(mi);
-  var minReq = getMinRequired(getAvgDailyUnits(), CALC_STATE.detailingPct/100, getLaidOffNames(mi));
-  var delta  = adj - minReq;
-  var adjEl  = document.getElementById('floatAdj');
-  var minEl  = document.getElementById('floatMin');
-  var delEl  = document.getElementById('floatDelta');
-  if(adjEl) adjEl.textContent = fmt(adj)+'/mo';
-  if(minEl) minEl.textContent = fmt(minReq)+'/mo';
-  if(delEl){
-    delEl.textContent = (delta>0?'+':'')+fmt(delta)+'/mo';
-    delEl.style.color = delta>0 ? 'var(--red)' : 'var(--green)';
-  }
-}
 
 // Load saved state from server, then render
 (async function(){
@@ -3048,8 +3012,29 @@ function updateLaborFloat(){
     }
   } catch(e) { console.log('Server load failed, using local state'); }
   render();
-  attachLaborScroll();
 })();
+
+window.addEventListener('scroll', function(){
+  var fb = document.getElementById('laborFloat');
+  if(!fb) return;
+  if(STATE.tab !== 'labor'){ fb.style.display='none'; return; }
+  var t = document.getElementById('laborTiles');
+  if(!t){ fb.style.display='none'; return; }
+  var show = t.getBoundingClientRect().bottom < 52;
+  fb.style.display = show ? 'block' : 'none';
+  if(show){
+    var mi=3, lo=getLaidOffNames(mi);
+    var adj=getAdjustedRosterCost(mi);
+    var mn=getMinRequired(getAvgDailyUnits(),CALC_STATE.detailingPct/100,lo);
+    var dl=adj-mn;
+    var ea=document.getElementById('floatAdj');
+    var em=document.getElementById('floatMin');
+    var ed=document.getElementById('floatDelta');
+    if(ea) ea.textContent=fmt(adj)+'/mo';
+    if(em) em.textContent=fmt(mn)+'/mo';
+    if(ed){ ed.textContent=(dl>0?'+':'')+fmt(dl)+'/mo'; ed.style.color=dl>0?'var(--red)':'var(--green)'; }
+  }
+}, true);
 </script>
 </body>
 </html>

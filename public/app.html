@@ -209,6 +209,7 @@ input[type=file]{display:none}
 
 /* ── LAYOUT ──────────────────────────────────────────────────────────────────*/
 .shell{display:grid;grid-template-columns:220px 1fr;grid-template-rows:56px 1fr;min-height:100vh}
+#content{padding:24px 28px}
 .topbar{grid-column:1/-1;background:var(--topbar-bg, #1B3A5C);display:flex;align-items:center;padding:0 24px;gap:14px;position:sticky;top:0;z-index:100}
 .topbar-logo{font-size:16px;font-weight:700;color:#fff;letter-spacing:-.3px;font-family:'DM Serif Display',serif}
 .topbar-badge{font-size:11px;padding:3px 10px;border-radius:20px;background:rgba(255,255,255,.12);color:rgba(255,255,255,.7);border:1px solid rgba(255,255,255,.15)}
@@ -224,7 +225,7 @@ input[type=file]{display:none}
 .nav-item.active svg{opacity:1}
 .nav-sep{height:1px;background:var(--border);margin:8px 16px}
 .nav-badge{margin-left:auto;background:var(--orange);color:#fff;font-size:9px;font-weight:700;padding:1px 6px;border-radius:10px}
-.main{padding:24px 28px;overflow-y:auto;background:var(--bg)}
+.main{padding:0;overflow-y:auto;background:var(--bg)}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 </head>
@@ -2206,15 +2207,13 @@ function renderLaborPage(){
 
   // ── SCENARIO BAR (always visible) ─────────────────────────────────────────
   // ── SUMMARY TILES ─────────────────────────────────────────────────────────
-  h += '<div style="position:sticky;top:-24px;z-index:40;background:var(--bg);padding:24px 0 12px;margin:-24px -28px 0;padding-left:28px;padding-right:28px;">';
+  h += '<div style="position:sticky;top:0;z-index:40;background:var(--bg);padding:20px 28px 12px;margin:0 -28px;">';
   h += renderScenarioBar();
   h += '<div id="laborTiles" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:0">';
   h += renderLaborTiles();
   h += '</div>';
-
-
-
-  h += '</div>'; // end sticky
+  h += '</div>'; // end sticky tiles
+  h += '<div style="padding:0 0 24px">';
   // ── TABS ──────────────────────────────────────────────────────────────────
   var laborTab = STATE.laborTab || 'overview';
   h += '<div style="display:flex;gap:0;border-bottom:2px solid var(--border);margin-bottom:16px">';

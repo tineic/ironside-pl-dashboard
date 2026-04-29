@@ -2297,6 +2297,7 @@ function setLaborTab(tab){
   if(el) el.innerHTML = renderLaborPage();
   else render();
   renderLaborChart();
+  setTimeout(attachLaborScroll, 100);
 }
 
 
@@ -2888,7 +2889,7 @@ function render(){
   else if(STATE.tab==='labor')      h=renderLaborPage();
   else if(STATE.tab==='actions')    h=renderActionsPage();
   document.getElementById('content').innerHTML=h;
-  if(STATE.tab==='labor') renderLaborChart();
+  if(STATE.tab==='labor'){ renderLaborChart(); setTimeout(attachLaborScroll,100); }
   // After labor page renders, populate utilization results
 
 }
@@ -2986,23 +2987,25 @@ function uploadProjection(event){
 loadPinsLocally();
 buildScenarioTable();
 
-// Labor float bar scroll detection
+// Labor float bar — IntersectionObserver approach
+var _laborObserver = null;
 function attachLaborScroll(){
-  var mainEl = document.querySelector('.main');
-  if(!mainEl) return;
-  mainEl.addEventListener('scroll', function(){
-    var laborTiles = document.getElementById('laborTiles');
-    var floatBar   = document.getElementById('laborFloat');
-    if(!laborTiles || !floatBar) return;
-    if(STATE.tab !== 'labor'){ floatBar.style.display='none'; return; }
-    var rect = laborTiles.getBoundingClientRect();
-    if(rect.bottom < 60){
-      floatBar.style.display = 'block';
-      updateLaborFloat();
-    } else {
-      floatBar.style.display = 'none';
-    }
-  });
+  if(_laborObserver){ _laborObserver.disconnect(); _laborObserver=null; }
+  var laborTiles = document.getElementById('laborTiles');
+  var floatBar   = document.getElementById('laborFloat');
+  if(!laborTiles || !floatBar) return;
+  _laborObserver = new IntersectionObserver(function(entries){
+    entries.forEach(function(entry){
+      if(STATE.tab !== 'labor'){ floatBar.style.display='none'; return; }
+      if(!entry.isIntersecting){
+        floatBar.style.display = 'block';
+        updateLaborFloat();
+      } else {
+        floatBar.style.display = 'none';
+      }
+    });
+  }, { threshold: 0, rootMargin: '0px' });
+  _laborObserver.observe(laborTiles);
 }
 
 function updateLaborFloat(){

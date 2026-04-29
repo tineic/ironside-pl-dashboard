@@ -231,6 +231,16 @@ input[type=file]{display:none}
 <body>
 <div class="shell">
 
+<div id="laborFloat" style="display:none;position:fixed;top:52px;left:220px;right:0;z-index:90;background:var(--surface);border-bottom:2px solid var(--border);padding:10px 28px;box-shadow:0 4px 12px rgba(0,0,0,0.1)">
+  <div style="display:flex;gap:24px;align-items:center">
+    <div><div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--muted)">Adjusted Roster</div><div style="font-size:16px;font-weight:700;color:var(--text)" id="floatAdj">—</div></div>
+    <div style="width:1px;height:32px;background:var(--border)"></div>
+    <div><div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--muted)">Min Required</div><div style="font-size:16px;font-weight:700;color:var(--blue)" id="floatMin">—</div></div>
+    <div style="width:1px;height:32px;background:var(--border)"></div>
+    <div><div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--muted)">Delta</div><div style="font-size:16px;font-weight:700" id="floatDelta">—</div></div>
+  </div>
+</div>
+
 <!-- TOPBAR -->
 <header class="topbar">
   <span class="topbar-logo">Ironside P&amp;L 2026</span>

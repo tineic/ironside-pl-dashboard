@@ -2828,7 +2828,7 @@ function addLayoff(){
   var personId   = document.getElementById('lyPerson').value;
   var startMonth = parseInt(document.getElementById('lyStart').value);
   var person     = STAFF.find(function(p){ return p.id===personId; });
-  if(!person) return;
+  if(!person){ console.error('addLayoff: person not found for id='+personId); return; }
   var hrs = (person.hrsPerWeek||person.hrs||38) * 52/12;
   var delta = -(person.base * STAFF_MULTIPLIER * hrs);
   if(!STATE.staffingChanges) STATE.staffingChanges=[];
@@ -2940,7 +2940,7 @@ function render(){
   else if(STATE.tab==='labor')      h=renderLaborPage();
   else if(STATE.tab==='actions')    h=renderActionsPage();
   document.getElementById('content').innerHTML=h;
-  if(STATE.tab==='labor'){ renderLaborChart(); setTimeout(attachLaborScroll,100); }
+  if(STATE.tab==='labor'){ renderLaborChart(); }
   // After labor page renders, populate utilization results
 
 }

@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+var PDATA = tml>
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
@@ -2104,7 +2104,7 @@ function getAdjustedRosterCost(monthIdx){
     if(laidOff.indexOf(p.name) >= 0) return sum;
     var currentHrs = reductions[p.name] !== undefined ? reductions[p.name] : (p.hrsPerWeek||p.hrs||38);
     // Apply live slider preview for Apr (first projection month)
-    if(monthIdx === 3 && STATE.rosterSliders && STATE.rosterSliders[p.id] !== undefined){
+    if(monthIdx === firstProjMonth() && STATE.rosterSliders && STATE.rosterSliders[p.id] !== undefined){
       currentHrs = STATE.rosterSliders[p.id];
     }
     return sum + (p.base * STAFF_MULTIPLIER) * (currentHrs * 52/12);
@@ -2112,6 +2112,9 @@ function getAdjustedRosterCost(monthIdx){
 }
 
 // Calculate minimum required cost for a month based on volume + layoffs
+// First projection month — updates automatically when actuals are loaded
+function firstProjMonth(){ return D.act_thru + 1; }
+
 var DAYS_PER_WEEK   = 4;
 var WEEKS_PER_MONTH = 52/12;
 var MIKE_CAPACITY_WK    = 15;
@@ -2247,7 +2250,7 @@ function getRosterMonthlyCost(){
 // ── LABOR PAGE RENDER ─────────────────────────────────────────────────────────
 function renderLaborPage(){
   var h = '';
-  var mi       = 3; // Apr — use for current month tile calcs (first projection month)
+  var mi       = firstProjMonth(); // first projection month (updates as actuals are added)
   var laidOff  = getLaidOffNames(mi);
   // tiles rendered via renderLaborTiles()
 
@@ -2355,10 +2358,10 @@ function setLaborTab(tab){
 
 // ── TAB 1: LABOR OVERVIEW ─────────────────────────────────────────────────────
 function renderLaborTiles(){
-  var mi      = 3;
+  var mi      = firstProjMonth();
   var laidOff = getLaidOffNames(mi);
   var adjCost = getAdjustedRosterCost(mi);
-  var units   = getAvgDailyUnits();
+  var units   = getDailyUnits(firstProjMonth());
   var detPct  = CALC_STATE.detailingPct / 100;
   var minReq  = getMinRequired(units, detPct, laidOff);
   var delta   = adjCost - minReq;
@@ -2376,7 +2379,7 @@ function renderLaborTiles(){
   h += '<div style="background:var(--surface);border:1px solid var(--blue-b);border-radius:10px;padding:18px 20px">';
   h += '<div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:8px">Minimum Required Cost</div>';
   h += '<div style="font-size:26px;font-weight:700;color:var(--blue);letter-spacing:-.02em">'+fmt(minReq)+'/mo</div>';
-  h += '<div style="font-size:11px;color:var(--muted);margin-top:4px">~'+units+' units/day from scenario</div>';
+  h += '<div style="font-size:11px;color:var(--muted);margin-top:4px">~'+units+' units/day ('+MONTHS[firstProjMonth()]+')</div>';
   h += '</div>';
 
   // Tile 3: Delta
@@ -2993,6 +2996,11 @@ function uploadActuals(event){
       document.getElementById('dsA').textContent='Actuals: '+lbl+' ('+file.name+')';
       document.getElementById('dsA').className='ds ds-u';
       render();
+      // Also send to server for persistence across sessions
+      var fd=new FormData(); fd.append('file', file);
+      fetch('/api/upload/actuals',{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(d){
+        if(d.pdata) Object.keys(d.pdata).forEach(function(k){ PDATA[k]=d.pdata[k]; });
+      }).catch(function(){});
     }catch(err){alert('Error parsing actuals: '+err.message);}
     event.target.value='';
   };
@@ -3025,6 +3033,11 @@ function uploadProjection(event){
       document.getElementById('dsP').textContent='Projection: '+file.name;
       document.getElementById('dsP').className='ds ds-u';
       render();
+      // Also send to server for persistence across sessions
+      var fd2=new FormData(); fd2.append('file', file);
+      fetch('/api/upload/projection',{method:'POST',body:fd2}).then(function(r){return r.json();}).then(function(d){
+        if(d.pdata) Object.keys(d.pdata).forEach(function(k){ PDATA[k]=d.pdata[k]; });
+      }).catch(function(){});
     }catch(err){alert('Error parsing projection: '+err.message);}
     event.target.value='';
   };
@@ -3035,10 +3048,26 @@ function uploadProjection(event){
 loadPinsLocally();
 buildScenarioTable();
 
+// ── LOAD PDATA FROM SERVER (overrides static embedded data) ──────────────────
+async function loadPdataFromServer(){
+  try {
+    var r = await fetch('/api/pdata');
+    if(!r.ok) return; // no data yet — use embedded fallback
+    var serverPdata = await r.json();
+    // Merge server data into PDATA
+    Object.keys(serverPdata).forEach(function(k){ PDATA[k] = serverPdata[k]; });
+    console.log('PDATA loaded from server — act_thru:', PDATA.act_thru);
+  } catch(e) {
+    console.log('Server pdata unavailable, using embedded data');
+  }
+}
 
 
-// Load saved state from server, then render
+
+// Load pdata and state from server, then render
 (async function(){
+  // Load financial data first
+  await loadPdataFromServer();
   try {
     var r = await fetch('/api/state');
     if(r.ok){

@@ -21,116 +21,118 @@ if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 // ── CSV PARSING ───────────────────────────────────────────────────────────────
 function parseNum(v) {
   if (v === null || v === undefined) return null;
-  const s = String(v).trim().replace(/,/g, '').replace(/ /g, '');
-  if (!s || s === 'nan' || s === 'NaN') return null;
+  const s = String(v).trim().replace(/,/g, '').replace(/\$/g, '').replace(/ /g, '');
+  if (!s || s === '' || s === '-') return null;
   const neg = s.startsWith('(') && s.endsWith(')');
   const n = parseFloat(s.replace(/[()]/g, ''));
   if (isNaN(n)) return null;
   return neg ? -n : n;
 }
 
-function parseCSV(text) {
+function parseCSVText(text) {
   const lines = text.split('\n');
   return lines.map(line => {
     const cells = [];
     let cur = '', inQ = false;
     for (let i = 0; i < line.length; i++) {
       if (line[i] === '"') { inQ = !inQ; continue; }
-      if (line[i] === ',' && !inQ) { cells.push(cur); cur = ''; continue; }
+      if (line[i] === ',' && !inQ) { cells.push(cur.trim()); cur = ''; continue; }
       cur += line[i];
     }
-    cells.push(cur);
+    cells.push(cur.trim());
     return cells;
   });
 }
 
-function rowVals(rows, idx, startCol) {
-  const row = rows[idx];
-  if (!row) return new Array(12).fill(0);
-  return Array.from({length: 12}, (_, i) => parseNum(row[startCol + i]) || 0);
-}
-
-function findRow(rows, name, colCheck) {
-  for (let i = 0; i < rows.length; i++) {
-    const cell = (rows[i][colCheck] || '').trim();
-    if (cell === name) return i;
-  }
-  return -1;
+// Get 12 monthly values from a row starting at column 5 (Jan)
+function monthVals(row) {
+  if (!row) return new Array(12).fill(null);
+  return Array.from({ length: 12 }, (_, i) => parseNum(row[5 + i]));
 }
 
 function parseActuals(text) {
-  const rows = parseCSV(text);
-  const COL = 4; // name column
-  const START = 5; // Jan data starts
+  const rows = parseCSVText(text);
+  // Structure: col 4=category label, col 5=Jan, col 6=Feb ... col 16=Dec
+  // Key rows (0-indexed):
+  // Row 116: Labor total
+  // Row 125: Net Sales
+  // Row 126: Cost of Goods
+  // Row 127: Gross Profit
+  // Row 128: Operating Cost
+  // Row 129: Net Income
 
-  // Find key rows
-  const nsIdx    = findRow(rows, 'Net Sales', COL);
-  const cogsIdx  = findRow(rows, 'Cost of Goods Sold', COL) || findRow(rows, 'Cost of Goods', COL);
-  const gpIdx    = findRow(rows, 'Gross Profit', COL);
-  const ocIdx    = findRow(rows, 'Total Expense', COL) !== -1 ? findRow(rows, 'Total Expense', COL) : findRow(rows, 'Total Operating Expenses', COL);
-  const niIdx    = findRow(rows, 'Net Income', COL) !== -1 ? findRow(rows, 'Net Income', COL) : findRow(rows, 'Net Ordinary Income', COL);
-  const labIdx   = findRow(rows, 'Labor', COL);
-  const ppIdx    = findRow(rows, 'Payment Processor', COL);
-  const mktIdx   = findRow(rows, 'Marketing', COL);
-  const compIdx  = findRow(rows, 'Company Expense', COL);
-  const rewIdx   = findRow(rows, 'Rewards', COL);
-  const bldgIdx  = findRow(rows, 'Building', COL);
-  const swIdx    = findRow(rows, 'Software', COL);
-  const persIdx  = findRow(rows, 'Personal', COL);
-  const miscIdx  = findRow(rows, 'Misc', COL);
+  const ns   = monthVals(rows[125]);
+  const cogs = monthVals(rows[126]);
+  const gp   = monthVals(rows[127]);
+  const oc   = monthVals(rows[128]);
+  const ni   = monthVals(rows[129]);
+  const labor = monthVals(rows[116]);
 
-  // Determine act_thru: last month with non-zero net sales
-  const ns = rowVals(rows, nsIdx, START);
+  // Determine act_thru: last month with a real non-zero Net Sales value
   let actThru = -1;
   for (let i = 0; i < 12; i++) {
-    if (ns[i] && Math.abs(ns[i]) > 100) actThru = i;
-    else break;
+    if (ns[i] !== null && ns[i] !== 0) actThru = i;
+    else break; // stop at first empty/zero month
   }
+
+  console.log('Parsed actuals — act_thru:', actThru, '| NS:', ns.slice(0, actThru+1).map(v => v ? Math.round(v) : null));
 
   return {
     act_thru: actThru,
-    actuals: {
-      ns:   rowVals(rows, nsIdx, START),
-      cogs: rowVals(rows, cogsIdx, START),
-      gp:   rowVals(rows, gpIdx, START),
-      oc:   rowVals(rows, ocIdx, START),
-      ni:   rowVals(rows, niIdx, START),
-      labor: rowVals(rows, labIdx, START),
-      pp:    rowVals(rows, ppIdx, START),
-      mkt:   rowVals(rows, mktIdx, START),
-      comp:  rowVals(rows, compIdx, START),
-      rew:   rowVals(rows, rewIdx, START),
-      bldg:  rowVals(rows, bldgIdx, START),
-      sw:    rowVals(rows, swIdx, START),
-      pers:  rowVals(rows, persIdx, START),
-      misc:  rowVals(rows, miscIdx, START),
-    }
+    true_ns:    ns,
+    true_cogs:  cogs,
+    true_gp:    gp,
+    true_oc:    oc,
+    true_ni:    ni,
+    true_labor: labor,
   };
 }
 
 function parseProjection(text) {
-  const rows = parseCSV(text);
-  const START = 5;
+  const rows = parseCSVText(text);
+  // Structure: col 4=category label, col 5=Jan, col 6=Feb ... col 16=Dec
+  // Key rows (0-indexed):
+  // Row 117: Employee Labor & Taxes (labor_row118 in app)
+  // Row 118: Creative Contractors (labor_row119)
+  // Row 119: Other Labor (labor_row120)
+  // Row 120: Projects/One-Time (labor_row121)
+  // Row 121: Company Expense
+  // Row 122: Rewards
+  // Row 123: Payment Processor
+  // Row 124: Building
+  // Row 125: Marketing
+  // Row 126: Software
+  // Row 127: Personal
+  // Row 128: Misc
+  // Row 129: Net Sales
+  // Row 130: Cost of Goods
+  // Row 131: Gross Profit
+  // Row 132: Operating Cost
+  // Row 133: Net Income
 
-  // Key rows (0-indexed) — same structure as original spreadsheet
+  const proj_ns = monthVals(rows[129]);
+
+  console.log('Parsed projection — NS:', proj_ns.map(v => v ? Math.round(v) : null));
+
   return {
-    proj_ns:   rowVals(rows, 129, START),
-    proj_cogs: rowVals(rows, 130, START),
-    proj_oc:   rowVals(rows, 132, START),
-    proj_ni:   rowVals(rows, 133, START),
-    lr118: rowVals(rows, 117, START),
-    lr119: rowVals(rows, 118, START),
-    lr120: rowVals(rows, 119, START),
-    lr121: rowVals(rows, 120, START),
-    fixed: {
-      comp_exp: rowVals(rows, 121, START),
-      rewards:  rowVals(rows, 122, START),
-      base_pp:  rowVals(rows, 123, START),
-      building: rowVals(rows, 124, START),
-      base_mkt: rowVals(rows, 125, START),
-      software: rowVals(rows, 126, START),
-      personal: rowVals(rows, 127, START),
-      misc:     rowVals(rows, 128, START),
+    labor_row118: monthVals(rows[117]),
+    labor_row119: monthVals(rows[118]),
+    labor_row120: monthVals(rows[119]),
+    labor_row121: monthVals(rows[120]),
+    proj_ns:      proj_ns,
+    proj_cogs:    monthVals(rows[130]),
+    proj_gp:      monthVals(rows[131]),
+    proj_oc:      monthVals(rows[132]),
+    proj_ni:      monthVals(rows[133]),
+    FIXED: {
+      comp_exp: monthVals(rows[121]),
+      rewards:  monthVals(rows[122]),
+      base_pp:  monthVals(rows[123]),
+      building: monthVals(rows[124]),
+      base_mkt: monthVals(rows[125]),
+      software: monthVals(rows[126]),
+      personal: monthVals(rows[127]),
+      misc:     monthVals(rows[128]),
     }
   };
 }
@@ -146,20 +148,15 @@ function rebuildPdata() {
     if (hasActuals) {
       const actText = fs.readFileSync(ACTUALS_FILE, 'utf8');
       Object.assign(pdata, parseActuals(actText));
-      console.log(`Parsed actuals: act_thru=${pdata.act_thru}`);
     }
 
     if (hasProjection) {
       const projText = fs.readFileSync(PROJECTION_FILE, 'utf8');
       Object.assign(pdata, parseProjection(projText));
-      console.log('Parsed projection');
     }
 
-    // Preserve static values that don't come from CSVs
-    pdata.dec_2025_ns   = pdata.dec_2025_ns   || 1152634.85;
-    pdata.units_2025    = pdata.units_2025    || [306,325,330,346,308,278,235,313,295,316,488,443];
-
     fs.writeFileSync(PDATA_FILE, JSON.stringify(pdata));
+    console.log('pdata.json rebuilt — act_thru:', pdata.act_thru);
     return pdata;
   } catch(e) {
     console.error('rebuildPdata error:', e.message);
@@ -176,7 +173,8 @@ const DEFAULT_STATE = {
   clickupSent: {},
   laborOverrides: {},
   rosterSliders: {},
-  lastUpdated: null
+  laborTab: 'overview',
+  tab: 'overview',
 };
 
 function readState() {
@@ -197,7 +195,6 @@ function writeState(state) {
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
-// Auth
 app.get('/', (req, res) => {
   const cookie = (req.headers.cookie || '').split(';').find(c => c.trim().startsWith('auth='));
   if (cookie && cookie.split('=')[1] === PASS) return res.redirect('/app');
@@ -228,13 +225,9 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 // ── API: PDATA ────────────────────────────────────────────────────────────────
 app.get('/api/pdata', (req, res) => {
-  // Return cached pdata if available
   if (fs.existsSync(PDATA_FILE)) {
-    try {
-      return res.json(JSON.parse(fs.readFileSync(PDATA_FILE, 'utf8')));
-    } catch(e) {}
+    try { return res.json(JSON.parse(fs.readFileSync(PDATA_FILE, 'utf8'))); } catch(e) {}
   }
-  // Try to build from CSVs
   const pdata = rebuildPdata();
   if (pdata) return res.json(pdata);
   res.status(404).json({ error: 'No data uploaded yet' });
@@ -262,9 +255,10 @@ app.post('/api/upload/:type', upload.single('file'), (req, res) => {
   try {
     fs.copyFileSync(req.file.path, dest);
     fs.unlinkSync(req.file.path);
-    // Rebuild pdata immediately after upload
+    // Delete old pdata so it gets rebuilt fresh
+    if (fs.existsSync(PDATA_FILE)) fs.unlinkSync(PDATA_FILE);
     const pdata = rebuildPdata();
-    res.json({ ok: true, pdata: pdata || null, message: `${type} uploaded and parsed` });
+    res.json({ ok: true, pdata: pdata || null });
   } catch(e) {
     res.status(500).json({ error: e.message });
   }
@@ -291,10 +285,8 @@ app.get('/app', (req, res) => res.sendFile(path.join(__dirname, 'public', 'app.h
 app.get('/health', (req, res) => res.json({ ok: true, uptime: process.uptime() }));
 
 app.listen(PORT, () => {
-  console.log(`Ironside Dashboard running on port ${PORT}`);
-  // Try to rebuild pdata on startup if CSVs exist
+  console.log(`Ironside Dashboard on port ${PORT}`);
   if (fs.existsSync(ACTUALS_FILE) || fs.existsSync(PROJECTION_FILE)) {
     rebuildPdata();
-    console.log('pdata rebuilt from existing CSVs');
   }
 });

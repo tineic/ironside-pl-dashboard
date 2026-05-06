@@ -3093,12 +3093,29 @@ async function loadPdataFromServer(){
   try {
     var r = await fetch('/api/pdata');
     if(!r.ok) return; // no data yet — use embedded fallback
-    var serverPdata = await r.json();
-    // Merge server data into PDATA
-    Object.keys(serverPdata).forEach(function(k){ PDATA[k] = serverPdata[k]; });
-    console.log('PDATA loaded from server — act_thru:', PDATA.act_thru);
+    var s = await r.json();
+    if(s.error) return;
+    // Merge into D — the live data object used by all calculations
+    if(s.act_thru !== undefined) D.act_thru = s.act_thru;
+    if(s.true_ns)    D.true_ns    = s.true_ns;
+    if(s.true_cogs)  D.true_cogs  = s.true_cogs;
+    if(s.true_gp)    D.true_gp    = s.true_gp;
+    if(s.true_oc)    D.true_oc    = s.true_oc;
+    if(s.true_ni)    D.true_ni    = s.true_ni;
+    if(s.true_labor) D.true_labor = s.true_labor;
+    if(s.labor_row118) D.labor_row118 = s.labor_row118;
+    if(s.labor_row119) D.labor_row119 = s.labor_row119;
+    if(s.labor_row120) D.labor_row120 = s.labor_row120;
+    if(s.labor_row121) D.labor_row121 = s.labor_row121;
+    if(s.proj_ns)   D.proj_ns   = s.proj_ns;
+    if(s.proj_cogs) D.proj_cogs = s.proj_cogs;
+    if(s.proj_gp)   D.proj_gp   = s.proj_gp;
+    if(s.proj_oc)   D.proj_oc   = s.proj_oc;
+    if(s.proj_ni)   D.proj_ni   = s.proj_ni;
+    if(s.FIXED) Object.keys(s.FIXED).forEach(function(k){ if(FIXED[k]) FIXED[k] = s.FIXED[k]; });
+    console.log('Server pdata loaded — act_thru:', D.act_thru);
   } catch(e) {
-    console.log('Server pdata unavailable, using embedded data');
+    console.log('Server pdata unavailable, using embedded data:', e.message);
   }
 }
 

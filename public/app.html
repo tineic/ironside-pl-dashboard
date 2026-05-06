@@ -693,6 +693,7 @@ function getNI(i){
 }
 
 // ── FORMATTERS ────────────────────────────────────────────────────────────────
+function fmtK(v){ return v===0||v===null||v===undefined ? '$0' : '$'+Math.round(Math.abs(v)/1000)+'k'; }
 function fmt(v, compact){
   if(v===null||v===undefined||isNaN(v)) return '\u2014';
   var neg=v<0, abs=Math.abs(v), s;

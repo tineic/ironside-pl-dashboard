@@ -2119,8 +2119,15 @@ var DAYS_PER_WEEK   = 4;
 var WEEKS_PER_MONTH = 52/12;
 var MIKE_CAPACITY_WK    = 15;
 var BUILDER_CAPACITY_WK = 20;
-var CAPACITY_LAB = {Building:5,Detailing:10,Inventory:40,Testing:45,Shipping:25,CS:12};
-var NS_PER_UNIT  = 2764;   // $/unit — Jan actual ($845,745 / 306 units)
+var CAPACITY_LAB = {
+  Building:  5,     // per builder per day (4-day week)
+  Detailing: 12.5,  // Juan ~50 units/wk real ÷ 4 days
+  Inventory: 30,    // Riley ~120/wk ÷ 4 days
+  Testing:   40,    // Shawn up to 40/day; Brett ≤5/day + RMA
+  Shipping:  25,    // Sterling ~100/wk ÷ 4 days
+  CS:        12     // coverage-based, not volume-driven
+};
+var NS_PER_UNIT  = 2886;   // $/unit — 2026 Q1 avg ($2,193,045 / 760 units)
 
 function getMinRequired(dailyUnits, detPct, laidOffNames){
   var total = 0;
@@ -2146,47 +2153,48 @@ function getMinRequired(dailyUnits, detPct, laidOffNames){
     remaining -= BUILDER_CAPACITY_WK;
   }
 
-  // ── OTHER DEPTS: scale existing floor hours with volume ──────────────────
-  // Each dept's floor person works minimum floor hours, scaling up to 38hrs
-  // as volume increases. Only add new staff if 38hrs isn't enough.
+  // ── TESTING: Brett always full salary; Shawn added if >5/day ─────────────
+  var BRETT_TEST_CAP_WK = 5 * DAYS_PER_WEEK;  // Brett tests max 5/day alongside RMA
+  var SHAWN_TEST_CAP_WK = 40 * DAYS_PER_WEEK; // Shawn handles up to 40/day testing
+  var brettRate = laidOffNames.indexOf('Brett') >= 0 ? GENERIC_RATE_BASE : 29.93;
+  total += brettRate * STAFF_MULTIPLIER * (40 * 52/12); // Brett always full salary
+  if(weeklyUnits > BRETT_TEST_CAP_WK){
+    var shawnRate = laidOffNames.indexOf('Shawn') >= 0 ? GENERIC_RATE_BASE : 22.00;
+    total += shawnRate * STAFF_MULTIPLIER * HRS_FULL_MO;
+  }
+  if(weeklyUnits > BRETT_TEST_CAP_WK + SHAWN_TEST_CAP_WK){
+    total += GENERIC_RATE_BASE * STAFF_MULTIPLIER * HRS_FULL_MO; // generic tester
+  }
+
+  // ── OTHER DEPTS: scale floor hours with volume ────────────────────────────
   var deptDefs = [
-    {name:'Detailing', floorPeople:[{name:'Juan',base:23.00,floorHrs:35}], extra:[{name:'Brandon',base:20.70}], capPerDay:10, demandFn:function(w){ return w*detPct; }},
+    {name:'Detailing', floorPeople:[{name:'Juan',base:23.00,floorHrs:35}],   extra:[{name:'Brandon',base:20.70}], capPerDay:12.5, demandFn:function(w){ return w*detPct; }},
     {name:'CS',        floorPeople:[{name:'Spencer',base:25.00,floorHrs:35},{name:'Danni',base:20.00,floorHrs:20}], extra:[], capPerDay:12, demandFn:function(w){ return w; }},
-    {name:'Testing',   floorPeople:[{name:'Brett',base:29.93,floorHrs:40,salaried:true}], extra:[{name:'Shawn',base:22.00}], capPerDay:45, demandFn:function(w){ return w; }},
     {name:'Shipping',  floorPeople:[{name:'Sterling',base:22.00,floorHrs:35}], extra:[], capPerDay:25, demandFn:function(w){ return w; }},
-    {name:'Inventory', floorPeople:[{name:'Riley',base:25.00,floorHrs:35}], extra:[], capPerDay:40, demandFn:function(w){ return w; }},
+    {name:'Inventory', floorPeople:[{name:'Riley',base:25.00,floorHrs:35}],   extra:[], capPerDay:30, demandFn:function(w){ return w; }},
   ];
 
   deptDefs.forEach(function(dept){
     var weeklyDemand = dept.demandFn(weeklyUnits);
-    var capPerHr     = dept.capPerDay / 8; // units per hour
-    var capPerWkAt38 = 38 * DAYS_PER_WEEK * capPerHr; // max capacity at 38hrs/wk per person
-
+    var capPerHr     = dept.capPerDay / 8;
+    var capPerWkAt38 = 38 * DAYS_PER_WEEK * capPerHr;
     var deptCap = 0;
+
     dept.floorPeople.forEach(function(p){
       var rate = laidOffNames.indexOf(p.name) >= 0 ? GENERIC_RATE_BASE : p.base;
       if(p.salaried){
-        // Salaried: always full hours regardless of volume
         total += rate * STAFF_MULTIPLIER * (p.floorHrs * 52/12);
         deptCap += p.floorHrs * DAYS_PER_WEEK * capPerHr;
       } else {
-        // Scale hours from floorHrs up to 38hrs based on demand
-        var myCapAt38 = 38 * DAYS_PER_WEEK * capPerHr;
-        var neededHrs = weeklyDemand > 0
-          ? Math.max(p.floorHrs, Math.min(38, Math.ceil(weeklyDemand / capPerHr / DAYS_PER_WEEK)))
-          : p.floorHrs;
-        // But only scale MY portion — subtract what previous floor people already cover
         var myDemand = Math.max(0, weeklyDemand - deptCap);
         var myNeededHrs = myDemand > 0
           ? Math.max(p.floorHrs, Math.min(38, Math.ceil(myDemand / (capPerHr * DAYS_PER_WEEK))))
           : p.floorHrs;
-        var myHrsMo = myNeededHrs * 52/12;
-        total += rate * STAFF_MULTIPLIER * myHrsMo;
+        total += rate * STAFF_MULTIPLIER * (myNeededHrs * 52/12);
         deptCap += myNeededHrs * DAYS_PER_WEEK * capPerHr;
       }
     });
 
-    // Add extra staff only if floor people at 38hrs still can't cover demand
     dept.extra.forEach(function(p){
       if(deptCap < weeklyDemand){
         var rate = laidOffNames.indexOf(p.name) >= 0 ? GENERIC_RATE_BASE : p.base;
@@ -2361,9 +2369,10 @@ function renderLaborTiles(){
   var mi      = firstProjMonth();
   var laidOff = getLaidOffNames(mi);
   var adjCost = getAdjustedRosterCost(mi);
-  var units   = getDailyUnits(firstProjMonth());
+  var unitsWk = getWeeklyUnits(firstProjMonth());
+  var unitsDy = getDailyUnits(firstProjMonth());
   var detPct  = CALC_STATE.detailingPct / 100;
-  var minReq  = getMinRequired(units, detPct, laidOff);
+  var minReq  = getMinRequired(unitsDy, detPct, laidOff);
   var delta   = adjCost - minReq;
   var savings = getRosterMonthlyCost() - adjCost;
   var h = '';
@@ -2379,7 +2388,7 @@ function renderLaborTiles(){
   h += '<div style="background:var(--surface);border:1px solid var(--blue-b);border-radius:10px;padding:18px 20px">';
   h += '<div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:8px">Minimum Required Cost</div>';
   h += '<div style="font-size:26px;font-weight:700;color:var(--blue);letter-spacing:-.02em">'+fmt(minReq)+'/mo</div>';
-  h += '<div style="font-size:11px;color:var(--muted);margin-top:4px">~'+units+' units/day ('+MONTHS[firstProjMonth()]+')</div>';
+  h += '<div style="font-size:11px;color:var(--muted);margin-top:4px">~'+unitsWk+' units/wk ('+MONTHS[firstProjMonth()]+')</div>';
   h += '</div>';
 
   // Tile 3: Delta
@@ -2429,6 +2438,7 @@ function renderLaborOverviewTab(){
 
   // Rows
   var compRows = [
+    {label:'Units/week',       fn:function(i){return i<3?null:getWeeklyUnits(i);}, color:'color:var(--muted)', fw:'font-size:10px', units:true},
     {label:'Projection sheet', fn:function(i){return getLaborBase(i);}, color:'color:var(--muted)', fw:''},
     {label:'Adjusted roster',  fn:function(i){return i<3?getTotalLabor(i):getAdjustedRosterCost(i);}, color:'color:var(--text)', fw:'font-weight:600'},
     {label:'Min required',     fn:function(i){return i<3?getFloorMonthlyCost():getMinRequired(getDailyUnits(i),detP,getLaidOffNames(i));}, color:'color:var(--blue)', fw:'font-weight:600'},
@@ -2436,13 +2446,26 @@ function renderLaborOverviewTab(){
   ];
 
   compRows.forEach(function(row){
-    var fy=0; for(var i=3;i<12;i++) fy+=(row.fn(i)||0);
+    var fy=0;
+    for(var i=3;i<12;i++){
+      var v = row.fn(i);
+      if(v && !row.units) fy += v;
+    }
     h += '<div style="display:grid;'+cols+'">';
     h += '<div style="padding:5px 0;font-size:11px;border-bottom:0.5px solid var(--border);'+row.color+';'+row.fw+'">'+row.label+'</div>';
     for(var i=3;i<12;i++){
-      h += '<div style="padding:5px 3px;text-align:right;font-size:11px;border-bottom:0.5px solid var(--border);'+row.color+';'+row.fw+'">'+fmtK(row.fn(i))+'</div>';
+      var v2 = row.fn(i);
+      if(row.units){
+        h += '<div style="padding:5px 3px;text-align:right;font-size:10px;border-bottom:0.5px solid var(--border);color:var(--muted)">'+(v2!==null?v2+'/wk':'—')+'</div>';
+      } else {
+        h += '<div style="padding:5px 3px;text-align:right;font-size:11px;border-bottom:0.5px solid var(--border);'+row.color+';'+row.fw+'">'+fmtK(v2)+'</div>';
+      }
     }
-    h += '<div style="padding:5px 3px;text-align:right;font-size:11px;border-bottom:0.5px solid var(--border);'+row.color+';font-weight:600">'+fmtK(fy)+'</div>';
+    if(row.units){
+      h += '<div style="padding:5px 3px;text-align:right;font-size:10px;border-bottom:0.5px solid var(--border);color:var(--muted)">—</div>';
+    } else {
+      h += '<div style="padding:5px 3px;text-align:right;font-size:11px;border-bottom:0.5px solid var(--border);'+row.color+';font-weight:600">'+fmtK(fy)+'</div>';
+    }
     h += '</div>';
   });
 

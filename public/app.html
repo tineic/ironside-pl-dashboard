@@ -2154,7 +2154,7 @@ function getMinRequired(dailyUnits, detPct, laidOffNames){
   }
 
   // ── TESTING: Brett always full salary; Shawn added if >5/day ─────────────
-  var BRETT_TEST_CAP_WK = 5 * DAYS_PER_WEEK;  // Brett tests max 5/day alongside RMA
+  var BRETT_TEST_CAP_WK = 9 * DAYS_PER_WEEK;  // Brett tests up to 9/day (36/wk) alongside RMA
   var SHAWN_TEST_CAP_WK = 40 * DAYS_PER_WEEK; // Shawn handles up to 40/day testing
   var brettRate = laidOffNames.indexOf('Brett') >= 0 ? GENERIC_RATE_BASE : 29.93;
   total += brettRate * STAFF_MULTIPLIER * (40 * 52/12); // Brett always full salary
@@ -2388,7 +2388,9 @@ function renderLaborTiles(){
   h += '<div style="background:var(--surface);border:1px solid var(--blue-b);border-radius:10px;padding:18px 20px">';
   h += '<div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:8px">Minimum Required Cost</div>';
   h += '<div style="font-size:26px;font-weight:700;color:var(--blue);letter-spacing:-.02em">'+fmt(minReq)+'/mo</div>';
-  h += '<div style="font-size:11px;color:var(--muted);margin-top:4px">~'+unitsWk+' units/wk ('+MONTHS[firstProjMonth()]+')</div>';
+  var fpm = firstProjMonth();
+  var fpmNS = getNS(fpm);
+  h += '<div style="font-size:11px;color:var(--muted);margin-top:4px">~'+unitsWk+' units/wk · '+fmtK(fpmNS)+' proj NS ('+MONTHS[fpm]+')</div>';
   h += '</div>';
 
   // Tile 3: Delta

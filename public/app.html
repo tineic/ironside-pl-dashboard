@@ -3018,7 +3018,7 @@ function uploadActuals(event){
       var p=parseCSV(e.target.result);
       var ns=p.summaries['Net Sales'];
       D.act_thru=-1;
-      if(ns) ns.months.forEach(function(v,i){if(v&&v>0) D.act_thru=i;});
+      if(ns){ for(var _i=0;_i<12;_i++){ if(ns.months[_i]&&ns.months[_i]>0) D.act_thru=_i; else break; } }
       D.true_ns=[]; D.true_cogs=[]; D.true_gp=[]; D.true_oc=[]; D.true_ni=[];
       for(var i=0;i<12;i++){
         var isA=i<=D.act_thru;
@@ -3039,7 +3039,7 @@ function uploadActuals(event){
       // Also send to server for persistence across sessions
       var fd=new FormData(); fd.append('file', file);
       fetch('/api/upload/actuals',{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(d){
-        if(d.pdata) Object.keys(d.pdata).forEach(function(k){ PDATA[k]=d.pdata[k]; });
+        // Server response already handled by client parse above; just confirms persistence
       }).catch(function(){});
     }catch(err){alert('Error parsing actuals: '+err.message);}
     event.target.value='';
@@ -3076,7 +3076,7 @@ function uploadProjection(event){
       // Also send to server for persistence across sessions
       var fd2=new FormData(); fd2.append('file', file);
       fetch('/api/upload/projection',{method:'POST',body:fd2}).then(function(r){return r.json();}).then(function(d){
-        if(d.pdata) Object.keys(d.pdata).forEach(function(k){ PDATA[k]=d.pdata[k]; });
+        // Server response already handled by client parse above; just confirms persistence
       }).catch(function(){});
     }catch(err){alert('Error parsing projection: '+err.message);}
     event.target.value='';

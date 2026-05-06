@@ -2556,10 +2556,13 @@ function renderStaffRosterSection(){
   h += '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:14px">Staff Roster — Headcount & Hours</div>';
 
   // Table header
-  h += '<div style="display:grid;grid-template-columns:90px 90px 70px 70px 200px 1fr;gap:0;margin-bottom:4px">';
-  ['Name','Dept','Base','Loaded','Hours / week','Applied changes'].forEach(function(c,i){
-    var pad = i===5 ? 'padding:4px 6px 4px 16px' : 'padding:4px 6px';
-    h += '<div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);'+pad+';border-bottom:1px solid var(--b2)">'+c+'</div>';
+  var rCols = '90px 70px 60px 60px 160px 70px 1px 1fr';
+  h += '<div style="display:grid;grid-template-columns:'+rCols+';gap:0;align-items:end;margin-bottom:4px">';
+  var hdrs  = ['Name','Dept','Base','Loaded','Hours/wk','Cost/mo','','Applied Changes'];
+  var aligns= ['left','left','center','center','center','center','','left'];
+  hdrs.forEach(function(lbl,i){
+    if(i===6){ h += '<div style="border-bottom:1px solid var(--b2)"></div>'; return; }
+    h += '<div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);padding:4px 6px;border-bottom:1px solid var(--b2);text-align:'+aligns[i]+'">'+(lbl||'')+'</div>';
   });
   h += '</div>';
 
@@ -2582,7 +2585,7 @@ function renderStaffRosterSection(){
       return c.personId===p.id && c.status!=='removed' && c.type==='hours';
     });
 
-    h += '<div style="display:grid;grid-template-columns:90px 90px 70px 70px 200px 1fr;gap:0;border-bottom:0.5px solid var(--border);align-items:start">';
+    h += '<div style="display:grid;grid-template-columns:'+rCols+';gap:0;border-bottom:0.5px solid var(--border);align-items:start">';
 
     // Name + floor indicator
     h += '<div style="padding:10px 6px;font-weight:600;font-size:12px;display:flex;align-items:center;gap:5px">';
@@ -2593,8 +2596,7 @@ function renderStaffRosterSection(){
     // Dept
     h += '<div style="padding:10px 6px;font-size:11px;color:var(--muted)">'+p.dept+'</div>';
 
-    // Base
-    h += '<div style="padding:10px 6px;font-size:11px">$'+p.base.toFixed(2)+'</div>';
+
 
     // Loaded
     h += '<div style="padding:10px 6px;font-size:11px">$'+loaded.toFixed(2)+'</div>';
@@ -2607,7 +2609,7 @@ function renderStaffRosterSection(){
     h += 'data-pid="'+p.id+'" oninput="onRosterSlider(this.dataset.pid,this.value)" ';
     h += 'style="width:110px;accent-color:var(--blue)">';
     h += '<span style="font-size:11px;font-weight:600;min-width:28px" id="sliderLbl_'+p.id+'">'+previewHrs+' h/wk</span>';
-    h += '<span id="monthlyCost_'+p.id+'" style="font-size:11px;color:var(--t2);margin-left:4px">'+fmt(previewMonthly)+'/mo</span>';
+
     h += '<span id="savingsLbl_'+p.id+'" style="font-size:10px;color:var(--green);display:'+(hasPreview?'':'none')+'">'+(hasPreview?'-'+fmt(monthly-previewMonthly)+'/mo':'')+'</span>';
     h += '</div>';
 
@@ -2631,8 +2633,14 @@ function renderStaffRosterSection(){
     }
     h += '</div>';
 
+    // Cost/mo column
+    h += '<div style="padding:10px 6px;font-size:11px;text-align:center;white-space:nowrap" id="monthlyCost_'+p.id+'">'+fmt(previewMonthly)+'/mo</div>';
+
+    // Divider column
+    h += '<div style="background:var(--border);width:1px;margin:4px 0"></div>';
+
     // Applied changes column
-    h += '<div style="padding:8px 6px 8px 16px;font-size:11px">';
+    h += '<div style="padding:8px 12px;font-size:11px">';
     if(activeChanges.length){
       activeChanges.forEach(function(ch){
         var realIdx = (STATE.staffingChanges||[]).indexOf(ch);

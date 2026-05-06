@@ -2555,19 +2555,21 @@ function renderStaffRosterSection(){
   var h = '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px 20px;margin-bottom:16px">';
   h += '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:14px">Staff Roster — Headcount & Hours</div>';
 
-  // Column layout: Name | Dept | Base | Loaded | Slider | Hrs | Cost | │ | Applied Changes
-  var G = '100px 100px 62px 62px 130px 44px 68px 12px 1fr';
+  // Table wrapper with relative positioning for the vertical divider line
+  h += '<div style="position:relative">';
+
+  // Column layout: Name | Dept | Base | Loaded | Slider+apply | Hrs | Cost | Applied Changes
+  var G = '100px 100px 62px 62px 1fr 44px 72px 1fr';
 
   // Header row
   h += '<div style="display:grid;grid-template-columns:'+G+';align-items:end;margin-bottom:2px">';
-  var hLabels = ['Name','Dept','Base','Loaded','','Hrs/wk','Cost/mo','','Applied Changes'];
-  var hAligns = ['left','left','right','right','','center','center','','left'];
-  hLabels.forEach(function(lbl, i){
-    if(i === 7){
-      h += '<div style="border-bottom:1px solid var(--b2)"></div>';
-    } else {
-      h += '<div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);padding:0 4px 5px;border-bottom:1px solid var(--b2);text-align:'+(hAligns[i]||'left')+'">'+lbl+'</div>';
-    }
+  ['Name','Dept','Base','Loaded','','Hrs/wk','Cost/mo','Applied Changes'].forEach(function(lbl, i){
+    var style = 'font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);padding:0 4px 5px;border-bottom:1px solid var(--b2);';
+    if(i < 4) style += 'text-align:left';
+    else if(i === 4) style += 'text-align:left';
+    else if(i < 7) style += 'text-align:center';
+    else style += 'text-align:left;padding-left:14px';
+    h += '<div style="'+style+'">'+lbl+'</div>';
   });
   h += '</div>';
 
@@ -2577,6 +2579,7 @@ function renderStaffRosterSection(){
     var defHrs  = parseInt(p.hrsPerWeek||p.hrs||38, 10);
     var prevHrs = (STATE.rosterSliders && STATE.rosterSliders[p.id] !== undefined) ? STATE.rosterSliders[p.id] : defHrs;
     var monthly = loaded * (prevHrs * 52/12);
+    var defMonthly = loaded * (defHrs * 52/12);
     var hasPreview = prevHrs !== defHrs;
     var isFloor = FLOOR_CREW.indexOf(p.name) >= 0;
 
@@ -2584,56 +2587,50 @@ function renderStaffRosterSection(){
       return c.personId === p.id && c.status !== 'removed' && c.type === 'hours';
     });
 
-    h += '<div style="display:grid;grid-template-columns:'+G+';align-items:center;border-bottom:0.5px solid var(--border);min-height:48px;position:relative">';
+    h += '<div style="display:grid;grid-template-columns:'+G+';align-items:start;border-bottom:0.5px solid var(--border)">';
 
     // Name
-    h += '<div style="padding:8px 4px;font-size:12px;font-weight:600;display:flex;align-items:center;gap:5px">';
+    h += '<div style="padding:10px 4px;font-size:12px;font-weight:600;display:flex;align-items:center;gap:5px">';
     h += p.name;
     if(isFloor) h += '<span style="width:5px;height:5px;border-radius:50%;background:var(--blue);flex-shrink:0"></span>';
     h += '</div>';
 
     // Dept
-    h += '<div style="padding:8px 4px;font-size:11px;color:var(--muted)">'+p.dept+'</div>';
+    h += '<div style="padding:10px 4px;font-size:11px;color:var(--muted)">'+p.dept+'</div>';
 
     // Base
-    h += '<div style="padding:8px 4px;font-size:11px;text-align:right">$'+p.base.toFixed(2)+'</div>';
+    h += '<div style="padding:10px 4px;font-size:11px;text-align:right">$'+p.base.toFixed(2)+'</div>';
 
     // Loaded
-    h += '<div style="padding:8px 4px;font-size:11px;text-align:right">$'+loaded.toFixed(2)+'</div>';
+    h += '<div style="padding:10px 4px;font-size:11px;text-align:right">$'+loaded.toFixed(2)+'</div>';
 
-    // Slider
-    h += '<div style="padding:4px 4px">';
+    // Slider + apply row stacked vertically
+    h += '<div style="padding:10px 4px 8px">';
     h += '<input type="range" min="0" max="38" step="1" value="'+prevHrs+'" ';
     h += 'id="slider_'+p.id+'" data-pid="'+p.id+'" ';
     h += 'oninput="onRosterSlider(this.dataset.pid,this.value)" ';
-    h += 'style="width:100%;accent-color:var(--blue)">';
-    if(hasPreview){
-      h += '<div style="display:flex;gap:4px;margin-top:2px;flex-wrap:nowrap" id="applyRow_'+p.id+'">';
-      h += '<select id="hrFrom_'+p.id+'" style="padding:2px 4px;font-size:9px;background:var(--s2);border:1px solid var(--border);border-radius:4px;color:var(--text)">';
-      ['Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'].forEach(function(m,i){ h += '<option value="'+(i+3)+'"'+(i===0?' selected':'')+'>'+m+'</option>'; });
-      h += '</select>';
-      h += '<span style="font-size:9px;color:var(--muted);line-height:20px">→</span>';
-      h += '<select id="hrTo_'+p.id+'" style="padding:2px 4px;font-size:9px;background:var(--s2);border:1px solid var(--border);border-radius:4px;color:var(--text)">';
-      ['Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'].forEach(function(m,i){ h += '<option value="'+(i+3)+'"'+(i===8?' selected':'')+'>'+m+'</option>'; });
-      h += '</select>';
-      h += '<button data-pid="'+p.id+'" onclick="applyRosterSlider(this.dataset.pid)" style="padding:2px 6px;background:var(--blue);color:#fff;border:none;border-radius:4px;font-size:9px;font-weight:600;cursor:pointer">Apply</button>';
-      h += '<button data-pid="'+p.id+'" onclick="resetRosterSlider(this.dataset.pid)" style="padding:2px 5px;background:var(--s2);color:var(--muted);border:1px solid var(--border);border-radius:4px;font-size:9px;cursor:pointer">✕</button>';
-      h += '</div>';
-    } else {
-      h += '<div id="applyRow_'+p.id+'" style="display:none"></div>';
-    }
+    h += 'style="width:100%;accent-color:var(--blue);display:block;margin-bottom:6px">';
+    // Apply row — always rendered, shown/hidden
+    h += '<div id="applyRow_'+p.id+'" style="display:'+(hasPreview?'flex':'none')+';align-items:center;gap:4px;flex-wrap:nowrap;padding-top:6px">';
+    h += '<select id="hrFrom_'+p.id+'" style="padding:2px 4px;font-size:9px;background:var(--s2);border:1px solid var(--border);border-radius:4px;color:var(--text)">';
+    ['Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'].forEach(function(m,i){ h += '<option value="'+(i+3)+'"'+(i===0?' selected':'')+'>'+m+'</option>'; });
+    h += '</select>';
+    h += '<span style="font-size:9px;color:var(--muted)">→</span>';
+    h += '<select id="hrTo_'+p.id+'" style="padding:2px 4px;font-size:9px;background:var(--s2);border:1px solid var(--border);border-radius:4px;color:var(--text)">';
+    ['Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'].forEach(function(m,i){ h += '<option value="'+(i+3)+'"'+(i===8?' selected':'')+'>'+m+'</option>'; });
+    h += '</select>';
+    h += '<button data-pid="'+p.id+'" onclick="applyRosterSlider(this.dataset.pid)" style="padding:2px 7px;background:var(--blue);color:#fff;border:none;border-radius:4px;font-size:9px;font-weight:600;cursor:pointer">Apply</button>';
+    h += '<button data-pid="'+p.id+'" onclick="resetRosterSlider(this.dataset.pid)" style="padding:2px 5px;background:var(--s2);color:var(--muted);border:1px solid var(--border);border-radius:4px;font-size:9px;cursor:pointer">✕</button>';
+    h += '</div>';
     h += '</div>';
 
-    // Hrs/wk label
-    h += '<div style="padding:8px 4px;font-size:11px;font-weight:600;text-align:center" id="sliderLbl_'+p.id+'">'+prevHrs+'</div>';
+    // Hrs/wk
+    h += '<div style="padding:10px 4px;font-size:11px;font-weight:600;text-align:center" id="sliderLbl_'+p.id+'">'+prevHrs+'</div>';
 
     // Cost/mo
-    h += '<div style="padding:8px 4px;font-size:11px;text-align:center;white-space:nowrap" id="monthlyCost_'+p.id+'">'+fmt(monthly)+'/mo</div>';
+    h += '<div style="padding:10px 4px;font-size:11px;text-align:center;white-space:nowrap" id="monthlyCost_'+p.id+'">'+fmt(monthly)+'/mo</div>';
 
-
-
-
-    // Applied Changes (border-left acts as divider)
+    // Applied Changes — padding-left creates visual separation
     h += '<div style="padding:8px 8px 8px 14px;font-size:11px;border-left:1px solid var(--border)">';
     if(activeChanges.length){
       activeChanges.forEach(function(ch){
@@ -2653,21 +2650,18 @@ function renderStaffRosterSection(){
     } else {
       h += '<span style="color:var(--m2)">—</span>';
     }
-    h += '</div>';
-
-    // Savings badge (only if preview active)
     if(hasPreview){
-      h += '<div style="grid-column:1/-1;padding:0 4px 6px;display:flex;gap:8px;align-items:center">';
-      h += '<span id="savingsLbl_'+p.id+'" style="font-size:10px;color:var(--green)">-'+fmt(loaded*(defHrs-prevHrs)*52/12)+'/mo savings preview</span>';
-      h += '</div>';
+      h += '<div id="savingsLbl_'+p.id+'" style="font-size:10px;color:var(--green);margin-top:3px">-'+fmt(defMonthly-monthly)+'/mo savings preview</div>';
     } else {
-      h += '<div id="savingsLbl_'+p.id+'" style="display:none;grid-column:1/-1"></div>';
+      h += '<div id="savingsLbl_'+p.id+'" style="display:none"></div>';
     }
+    h += '</div>';
 
     h += '</div>'; // end row
   });
 
-  h += '</div>';
+  h += '</div>'; // end table wrapper
+  h += '</div>'; // end card
   return h;
 }
 
@@ -2793,32 +2787,36 @@ function onRosterSlider(personId, val){
   var previewMonthly = loaded * (val * 52/12);
   var defaultMonthly = loaded * (defaultHrs * 52/12);
   var savings        = defaultMonthly - previewMonthly;
-  var hadPreview     = STATE.rosterSliders[personId] !== undefined;
-  var hasPreviewNow  = val !== defaultHrs;
+  var isPreview      = val !== defaultHrs;
 
   // Update state
-  if(!hasPreviewNow) delete STATE.rosterSliders[personId];
+  if(!isPreview) delete STATE.rosterSliders[personId];
   else STATE.rosterSliders[personId] = val;
 
-  // Re-render when apply row needs to appear (38→other) or disappear (other→38)
-  if(hadPreview !== hasPreviewNow){
-    var el = document.getElementById('content');
-    if(el && STATE.tab==='labor'){ el.innerHTML = renderLaborPage(); return; }
-  }
-
-  // Inline updates only (slider already moving, no re-render needed)
+  // Update hrs label
   var lbl = document.getElementById('sliderLbl_'+personId);
   if(lbl) lbl.textContent = val;
 
+  // Update cost
   var costLbl = document.getElementById('monthlyCost_'+personId);
   if(costLbl) costLbl.textContent = fmt(previewMonthly)+'/mo';
 
+  // Show/hide apply row
+  var applyRow = document.getElementById('applyRow_'+personId);
+  if(applyRow) applyRow.style.display = isPreview ? 'flex' : 'none';
+
+  // Show/hide savings
   var savLbl = document.getElementById('savingsLbl_'+personId);
   if(savLbl){
-    savLbl.textContent = '-'+fmt(savings)+'/mo savings preview';
-    savLbl.style.display = hasPreviewNow ? '' : 'none';
+    if(isPreview){
+      savLbl.textContent = '-'+fmt(savings)+'/mo savings preview';
+      savLbl.style.display = '';
+    } else {
+      savLbl.style.display = 'none';
+    }
   }
 
+  // Update tiles
   var tilesEl = document.getElementById('laborTiles');
   if(tilesEl) tilesEl.innerHTML = renderLaborTiles();
 }

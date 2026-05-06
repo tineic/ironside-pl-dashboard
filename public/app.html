@@ -2584,7 +2584,7 @@ function renderStaffRosterSection(){
       return c.personId === p.id && c.status !== 'removed' && c.type === 'hours';
     });
 
-    h += '<div style="display:grid;grid-template-columns:'+G+';align-items:center;border-bottom:0.5px solid var(--border);min-height:48px">';
+    h += '<div style="display:grid;grid-template-columns:'+G+';align-items:center;border-bottom:0.5px solid var(--border);min-height:48px;position:relative">';
 
     // Name
     h += '<div style="padding:8px 4px;font-size:12px;font-weight:600;display:flex;align-items:center;gap:5px">';
@@ -2630,11 +2630,11 @@ function renderStaffRosterSection(){
     // Cost/mo
     h += '<div style="padding:8px 4px;font-size:11px;text-align:center;white-space:nowrap" id="monthlyCost_'+p.id+'">'+fmt(monthly)+'/mo</div>';
 
-    // Divider
-    h += '<div style="background:var(--border);width:1px;height:100%;margin:0 2px"></div>';
 
-    // Applied Changes
-    h += '<div style="padding:8px 8px;font-size:11px">';
+
+
+    // Applied Changes (border-left acts as divider)
+    h += '<div style="padding:8px 8px 8px 14px;font-size:11px;border-left:1px solid var(--border)">';
     if(activeChanges.length){
       activeChanges.forEach(function(ch){
         var realIdx = (STATE.staffingChanges||[]).indexOf(ch);
@@ -2788,44 +2788,37 @@ function onRosterSlider(personId, val){
   if(!STATE.rosterSliders) STATE.rosterSliders = {};
   var p = STAFF.find(function(s){ return s.id===personId; });
   if(!p) return;
-  var defaultHrs = parseInt(p.hrsPerWeek||p.hrs||38, 10);
-  var loaded = p.base * STAFF_MULTIPLIER;
-  var defaultMonthly = loaded * (defaultHrs * 52/12);
+  var defaultHrs     = parseInt(p.hrsPerWeek||p.hrs||38, 10);
+  var loaded         = p.base * STAFF_MULTIPLIER;
   var previewMonthly = loaded * (val * 52/12);
-  var savings = defaultMonthly - previewMonthly;
+  var defaultMonthly = loaded * (defaultHrs * 52/12);
+  var savings        = defaultMonthly - previewMonthly;
+  var hadPreview     = STATE.rosterSliders[personId] !== undefined;
+  var hasPreviewNow  = val !== defaultHrs;
 
-  // Store in state (for tile calculations)
-  if(val === defaultHrs){
-    delete STATE.rosterSliders[personId];
-  } else {
-    STATE.rosterSliders[personId] = val;
+  // Update state
+  if(!hasPreviewNow) delete STATE.rosterSliders[personId];
+  else STATE.rosterSliders[personId] = val;
+
+  // Re-render when apply row needs to appear (38→other) or disappear (other→38)
+  if(hadPreview !== hasPreviewNow){
+    var el = document.getElementById('content');
+    if(el && STATE.tab==='labor'){ el.innerHTML = renderLaborPage(); return; }
   }
 
-  // Update label inline — no re-render
+  // Inline updates only (slider already moving, no re-render needed)
   var lbl = document.getElementById('sliderLbl_'+personId);
-  if(lbl) lbl.textContent = val+' h/wk';
+  if(lbl) lbl.textContent = val;
 
   var costLbl = document.getElementById('monthlyCost_'+personId);
   if(costLbl) costLbl.textContent = fmt(previewMonthly)+'/mo';
 
-  // Update savings label inline
   var savLbl = document.getElementById('savingsLbl_'+personId);
   if(savLbl){
-    if(val !== defaultHrs){
-      savLbl.textContent = '-'+fmt(savings)+'/mo';
-      savLbl.style.display = '';
-    } else {
-      savLbl.style.display = 'none';
-    }
+    savLbl.textContent = '-'+fmt(savings)+'/mo savings preview';
+    savLbl.style.display = hasPreviewNow ? '' : 'none';
   }
 
-  // Show/hide apply row inline
-  var applyRow = document.getElementById('applyRow_'+personId);
-  if(applyRow){
-    applyRow.style.display = (val !== defaultHrs) ? 'flex' : 'none';
-  }
-
-  // Update summary tiles (Adjusted Cost tile) without re-rendering roster
   var tilesEl = document.getElementById('laborTiles');
   if(tilesEl) tilesEl.innerHTML = renderLaborTiles();
 }

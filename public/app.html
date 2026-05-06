@@ -592,8 +592,19 @@ function getLaborBase(i){
   return (D.labor_row118[i]||0) + (D.labor_row119[i]||0) + (D.labor_row120[i]||0) + (D.labor_row121[i]||0);
 }
 
+// Returns total monthly savings from all active staffing changes for month i
+function getStaffingDelta(i){
+  if(isActual(i)) return 0; // never adjust actuals
+  return (STATE.staffingChanges||[]).reduce(function(sum, c){
+    if(c.status === 'removed') return sum;
+    if(i >= c.startMonth && i <= c.endMonth) return sum + (c.monthlyDelta||0);
+    return sum;
+  }, 0);
+}
+
 function getTotalLabor(i){
-  return getLaborRow118(i) + getLaborRow119(i) + getLaborRow120(i) + getLaborRow121(i);
+  var base = getLaborRow118(i) + getLaborRow119(i) + getLaborRow120(i) + getLaborRow121(i);
+  return base + getStaffingDelta(i); // delta is negative for savings
 }
 
 // ── PAYMENT PROCESSOR ─────────────────────────────────────────────────────────

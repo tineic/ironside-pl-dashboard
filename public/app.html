@@ -2555,116 +2555,119 @@ function renderStaffRosterSection(){
   var h = '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px 20px;margin-bottom:16px">';
   h += '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:14px">Staff Roster — Headcount & Hours</div>';
 
-  // Table header
-  var rCols = '90px 70px 60px 60px 160px 70px 1px 1fr';
-  h += '<div style="display:grid;grid-template-columns:'+rCols+';gap:0;align-items:end;margin-bottom:4px">';
-  var hdrs  = ['Name','Dept','Base','Loaded','Hours/wk','Cost/mo','','Applied Changes'];
-  var aligns= ['left','left','center','center','center','center','','left'];
-  hdrs.forEach(function(lbl,i){
-    if(i===6){ h += '<div style="border-bottom:1px solid var(--b2)"></div>'; return; }
-    h += '<div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);padding:4px 6px;border-bottom:1px solid var(--b2);text-align:'+aligns[i]+'">'+(lbl||'')+'</div>';
+  // Column layout: Name | Dept | Base | Loaded | Slider | Hrs | Cost | │ | Applied Changes
+  var G = '100px 100px 62px 62px 130px 44px 68px 12px 1fr';
+
+  // Header row
+  h += '<div style="display:grid;grid-template-columns:'+G+';align-items:end;margin-bottom:2px">';
+  var hLabels = ['Name','Dept','Base','Loaded','','Hrs/wk','Cost/mo','','Applied Changes'];
+  var hAligns = ['left','left','right','right','','center','center','','left'];
+  hLabels.forEach(function(lbl, i){
+    if(i === 7){
+      h += '<div style="border-bottom:1px solid var(--b2)"></div>';
+    } else {
+      h += '<div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);padding:0 4px 5px;border-bottom:1px solid var(--b2);text-align:'+(hAligns[i]||'left')+'">'+lbl+'</div>';
+    }
   });
   h += '</div>';
 
-  var totalCost = 0;
   STAFF.forEach(function(p){
-    if(p.active===false) return;
-    var loaded = p.base * STAFF_MULTIPLIER;
-    var hrs = p.hrsPerWeek||p.hrs||38;
-    var monthly = loaded * (hrs*52/12);
-    totalCost += monthly;
+    if(p.active === false) return;
+    var loaded  = p.base * STAFF_MULTIPLIER;
+    var defHrs  = parseInt(p.hrsPerWeek||p.hrs||38, 10);
+    var prevHrs = (STATE.rosterSliders && STATE.rosterSliders[p.id] !== undefined) ? STATE.rosterSliders[p.id] : defHrs;
+    var monthly = loaded * (prevHrs * 52/12);
+    var hasPreview = prevHrs !== defHrs;
     var isFloor = FLOOR_CREW.indexOf(p.name) >= 0;
 
-    // Get preview hrs from slider state (if any)
-    var previewHrs = STATE.rosterSliders && STATE.rosterSliders[p.id] !== undefined ? STATE.rosterSliders[p.id] : hrs;
-    var previewMonthly = loaded * (previewHrs * 52/12);
-    var hasPreview = previewHrs !== hrs;
-
-    // Get any active staffing changes for this person
     var activeChanges = (STATE.staffingChanges||[]).filter(function(c){
-      return c.personId===p.id && c.status!=='removed' && c.type==='hours';
+      return c.personId === p.id && c.status !== 'removed' && c.type === 'hours';
     });
 
-    h += '<div style="display:grid;grid-template-columns:'+rCols+';gap:0;border-bottom:0.5px solid var(--border);align-items:start">';
+    h += '<div style="display:grid;grid-template-columns:'+G+';align-items:center;border-bottom:0.5px solid var(--border);min-height:48px">';
 
-    // Name + floor indicator
-    h += '<div style="padding:10px 6px;font-weight:600;font-size:12px;display:flex;align-items:center;gap:5px">';
+    // Name
+    h += '<div style="padding:8px 4px;font-size:12px;font-weight:600;display:flex;align-items:center;gap:5px">';
     h += p.name;
-    if(isFloor) h += '<span style="width:5px;height:5px;border-radius:50%;background:var(--blue);flex-shrink:0" title="Floor crew"></span>';
+    if(isFloor) h += '<span style="width:5px;height:5px;border-radius:50%;background:var(--blue);flex-shrink:0"></span>';
     h += '</div>';
 
     // Dept
-    h += '<div style="padding:10px 6px;font-size:11px;color:var(--muted)">'+p.dept+'</div>';
+    h += '<div style="padding:8px 4px;font-size:11px;color:var(--muted)">'+p.dept+'</div>';
 
-
+    // Base
+    h += '<div style="padding:8px 4px;font-size:11px;text-align:right">$'+p.base.toFixed(2)+'</div>';
 
     // Loaded
-    h += '<div style="padding:10px 6px;font-size:11px">$'+loaded.toFixed(2)+'</div>';
+    h += '<div style="padding:8px 4px;font-size:11px;text-align:right">$'+loaded.toFixed(2)+'</div>';
 
-    // Slider column
-    h += '<div style="padding:8px 6px">';
-    h += '<div style="display:flex;align-items:center;gap:6px;margin-bottom:'+(hasPreview?'6':'0')+'px">';
-    h += '<input type="range" min="0" max="38" step="1" value="'+previewHrs+'" ';
-    h += 'id="slider_'+p.id+'" ';
-    h += 'data-pid="'+p.id+'" oninput="onRosterSlider(this.dataset.pid,this.value)" ';
-    h += 'style="width:110px;accent-color:var(--blue)">';
-    h += '<span style="font-size:11px;font-weight:600;min-width:28px" id="sliderLbl_'+p.id+'">'+previewHrs+' h/wk</span>';
-
-    h += '<span id="savingsLbl_'+p.id+'" style="font-size:10px;color:var(--green);display:'+(hasPreview?'':'none')+'">'+(hasPreview?'-'+fmt(monthly-previewMonthly)+'/mo':'')+'</span>';
-    h += '</div>';
-
-    // Month range + apply — always rendered, shown/hidden via JS
-    {
-      h += '<div id="applyRow_'+p.id+'" style="display:'+(hasPreview?'flex':'none')+';align-items:center;gap:6px;flex-wrap:wrap;margin-top:4px">';
-      h += '<select id="hrFrom_'+p.id+'" style="padding:3px 6px;font-size:10px;background:var(--s2);border:1px solid var(--border);border-radius:5px;color:var(--text);font-family:inherit">';
-      ['Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'].forEach(function(m,i){
-        h += '<option value="'+(i+3)+'"'+(i===0?' selected':'')+'>'+m+'</option>';
-      });
+    // Slider
+    h += '<div style="padding:4px 4px">';
+    h += '<input type="range" min="0" max="38" step="1" value="'+prevHrs+'" ';
+    h += 'id="slider_'+p.id+'" data-pid="'+p.id+'" ';
+    h += 'oninput="onRosterSlider(this.dataset.pid,this.value)" ';
+    h += 'style="width:100%;accent-color:var(--blue)">';
+    if(hasPreview){
+      h += '<div style="display:flex;gap:4px;margin-top:2px;flex-wrap:nowrap" id="applyRow_'+p.id+'">';
+      h += '<select id="hrFrom_'+p.id+'" style="padding:2px 4px;font-size:9px;background:var(--s2);border:1px solid var(--border);border-radius:4px;color:var(--text)">';
+      ['Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'].forEach(function(m,i){ h += '<option value="'+(i+3)+'"'+(i===0?' selected':'')+'>'+m+'</option>'; });
       h += '</select>';
-      h += '<span style="font-size:10px;color:var(--muted)">to</span>';
-      h += '<select id="hrTo_'+p.id+'" style="padding:3px 6px;font-size:10px;background:var(--s2);border:1px solid var(--border);border-radius:5px;color:var(--text);font-family:inherit">';
-      ['Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'].forEach(function(m,i){
-        h += '<option value="'+(i+3)+'"'+(i===8?' selected':'')+'>'+m+'</option>';
-      });
+      h += '<span style="font-size:9px;color:var(--muted);line-height:20px">→</span>';
+      h += '<select id="hrTo_'+p.id+'" style="padding:2px 4px;font-size:9px;background:var(--s2);border:1px solid var(--border);border-radius:4px;color:var(--text)">';
+      ['Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'].forEach(function(m,i){ h += '<option value="'+(i+3)+'"'+(i===8?' selected':'')+'>'+m+'</option>'; });
       h += '</select>';
-      h += '<button data-pid="'+p.id+'" onclick="applyRosterSlider(this.dataset.pid)" style="padding:3px 8px;background:var(--blue);color:#fff;border:none;border-radius:5px;font-size:10px;font-weight:600;cursor:pointer">Apply</button>';
-      h += '<button data-pid="'+p.id+'" onclick="resetRosterSlider(this.dataset.pid)" style="padding:3px 8px;background:var(--s2);color:var(--muted);border:1px solid var(--border);border-radius:5px;font-size:10px;cursor:pointer">Reset</button>';
+      h += '<button data-pid="'+p.id+'" onclick="applyRosterSlider(this.dataset.pid)" style="padding:2px 6px;background:var(--blue);color:#fff;border:none;border-radius:4px;font-size:9px;font-weight:600;cursor:pointer">Apply</button>';
+      h += '<button data-pid="'+p.id+'" onclick="resetRosterSlider(this.dataset.pid)" style="padding:2px 5px;background:var(--s2);color:var(--muted);border:1px solid var(--border);border-radius:4px;font-size:9px;cursor:pointer">✕</button>';
       h += '</div>';
+    } else {
+      h += '<div id="applyRow_'+p.id+'" style="display:none"></div>';
     }
     h += '</div>';
 
-    // Cost/mo column
-    h += '<div style="padding:10px 6px;font-size:11px;text-align:center;white-space:nowrap" id="monthlyCost_'+p.id+'">'+fmt(previewMonthly)+'/mo</div>';
+    // Hrs/wk label
+    h += '<div style="padding:8px 4px;font-size:11px;font-weight:600;text-align:center" id="sliderLbl_'+p.id+'">'+prevHrs+'</div>';
 
-    // Divider column
-    h += '<div style="background:var(--border);width:1px;margin:4px 0"></div>';
+    // Cost/mo
+    h += '<div style="padding:8px 4px;font-size:11px;text-align:center;white-space:nowrap" id="monthlyCost_'+p.id+'">'+fmt(monthly)+'/mo</div>';
 
-    // Applied changes column
-    h += '<div style="padding:8px 12px;font-size:11px">';
+    // Divider
+    h += '<div style="background:var(--border);width:1px;height:100%;margin:0 2px"></div>';
+
+    // Applied Changes
+    h += '<div style="padding:8px 8px;font-size:11px">';
     if(activeChanges.length){
       activeChanges.forEach(function(ch){
         var realIdx = (STATE.staffingChanges||[]).indexOf(ch);
-        h += '<div style="display:flex;align-items:center;gap:6px;flex-wrap:nowrap;margin-bottom:4px">';
+        h += '<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;flex-wrap:nowrap">';
         h += '<span style="background:var(--amber-l);color:var(--amber);border:1px solid var(--orange-b);border-radius:4px;padding:1px 5px;font-size:9px;font-weight:700;white-space:nowrap;flex-shrink:0">'+ch.newHrs+'h/wk</span>';
-        h += '<span style="color:var(--t2);font-size:11px;white-space:nowrap">'+MONTHS[ch.startMonth]+'–'+MONTHS[ch.endMonth]+'</span>';
-        h += '<span style="color:var(--green);font-weight:600;font-size:11px;white-space:nowrap;flex-shrink:0;font-size:11px;white-space:nowrap">-'+fmt(Math.abs(ch.monthlyDelta))+'/mo</span>';
+        h += '<span style="color:var(--t2);font-size:11px;white-space:nowrap;flex-shrink:0">'+MONTHS[ch.startMonth]+'–'+MONTHS[ch.endMonth]+'</span>';
+        h += '<span style="color:var(--green);font-weight:600;font-size:11px;white-space:nowrap;flex-shrink:0">-'+fmt(Math.abs(ch.monthlyDelta))+'/mo</span>';
         if(ch.clickupUrl){
-          h += '<a href="'+ch.clickupUrl+'" target="_blank" style="color:var(--blue);font-size:10px;text-decoration:none;text-align:center">↗</a>';
+          h += '<a href="'+ch.clickupUrl+'" target="_blank" style="color:var(--blue);font-size:10px;text-decoration:none;flex-shrink:0">↗</a>';
         } else {
-          h += '<button onclick="sendLaborChangeToClickUp('+realIdx+')" style="padding:1px 4px;background:none;border:1px solid var(--b2);border-radius:4px;font-size:9px;color:var(--muted);cursor:pointer">CU</button>';
+          h += '<button onclick="sendLaborChangeToClickUp('+realIdx+')" style="padding:1px 5px;background:none;border:1px solid var(--b2);border-radius:4px;font-size:9px;color:var(--muted);cursor:pointer;flex-shrink:0">CU</button>';
         }
-        h += '<button onclick="removeChange('+realIdx+')" style="background:none;border:none;color:var(--red);font-size:13px;cursor:pointer;padding:0;line-height:1">&times;</button>';
+        h += '<button onclick="removeChange('+realIdx+')" style="background:none;border:none;color:var(--red);font-size:13px;cursor:pointer;padding:0;line-height:1;flex-shrink:0">&times;</button>';
         h += '</div>';
       });
     } else {
-      h += '<span style="color:var(--m2);font-size:11px">—</span>';
+      h += '<span style="color:var(--m2)">—</span>';
     }
     h += '</div>';
+
+    // Savings badge (only if preview active)
+    if(hasPreview){
+      h += '<div style="grid-column:1/-1;padding:0 4px 6px;display:flex;gap:8px;align-items:center">';
+      h += '<span id="savingsLbl_'+p.id+'" style="font-size:10px;color:var(--green)">-'+fmt(loaded*(defHrs-prevHrs)*52/12)+'/mo savings preview</span>';
+      h += '</div>';
+    } else {
+      h += '<div id="savingsLbl_'+p.id+'" style="display:none;grid-column:1/-1"></div>';
+    }
 
     h += '</div>'; // end row
   });
 
-
+  h += '</div>';
   return h;
 }
 

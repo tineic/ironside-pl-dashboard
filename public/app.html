@@ -1227,7 +1227,7 @@ function renderPL(){
         var _pn=(STATE.pinNotes||[]).some(function(p){return p.name===item.name&&p.status==="open";});
         h+='<tr class="pin-row"><td class="lc" style="padding-left:14px;font-weight:500;position:relative">';
         h+=(_pn?'<span style="color:#e6820e;font-size:9px;margin-right:3px">*</span>':'')+item.name;
-        h+='<span class="pin-btn" style="display:none" title="Pin to Action Items">[pin]</span></td>';
+        h+='<button class="pin-btn" style="display:none;position:absolute;right:4px;top:50%;transform:translateY(-50%);background:var(--blue);color:#fff;border:none;border-radius:4px;font-size:9px;padding:1px 5px;cursor:pointer" title="Pin to Action Items">pin</button></td>';
         var tot=0;
         rng.forEach(function(i){
           var v;
@@ -2929,60 +2929,126 @@ function resetRosterSlider(personId){
 
 // ── PIN NOTES ─────────────────────────────────────────────────────────────────
 function openPinPopover(name, cat, monthIdx){
-  // Remove any existing popover
   var existing = document.getElementById('pinPopover');
-  if(existing) existing.remove();
+  if(existing) existing.parentNode.removeChild(existing);
 
   var pop = document.createElement('div');
   pop.id = 'pinPopover';
-  pop.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);'+
-    'background:var(--surface);border:1px solid var(--border);border-radius:12px;'+
-    'padding:20px 24px;z-index:999;width:360px;box-shadow:0 8px 32px rgba(0,0,0,0.18)';
+  pop.style.cssText = [
+    'position:fixed','top:50%','left:50%','transform:translate(-50%,-50%)',
+    'background:var(--surface)','border:1px solid var(--border)','border-radius:12px',
+    'padding:20px 24px','z-index:9999','width:360px',
+    'box-shadow:0 8px 32px rgba(0,0,0,0.2)','font-family:inherit'
+  ].join(';');
 
-  var monthOptions = MONTHS.map(function(m,i){
-    return '<option value="'+i+'"'+(i===monthIdx?' selected':'')+'>'+m+'</option>';
-  }).join('');
+  var title = document.createElement('div');
+  title.style.cssText = 'font-size:13px;font-weight:700;color:var(--text);margin-bottom:4px';
+  title.textContent = 'Pin to Action Items';
+  pop.appendChild(title);
 
-  pop.innerHTML = '<div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:4px">Pin to Action Items</div>'+
-    '<div style="font-size:11px;color:var(--muted);margin-bottom:14px">'+cat+' — '+name+'</div>'+
-    '<div style="margin-bottom:10px">'+
-      '<label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);display:block;margin-bottom:4px">Note</label>'+
-      '<textarea id="pinNote" rows="3" placeholder="e.g. Remove Klaviyo from June onward — update projection" '+
-        'style="width:100%;padding:8px;font-size:12px;font-family:inherit;background:var(--s2);border:1px solid var(--border);border-radius:6px;color:var(--text);resize:vertical;box-sizing:border-box"></textarea>'+
-    '</div>'+
-    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">'+
-      '<div>'+
-        '<label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);display:block;margin-bottom:4px">From month</label>'+
-        '<select id="pinMonth" style="width:100%;padding:6px;font-size:11px;background:var(--s2);border:1px solid var(--border);border-radius:6px;color:var(--text)">'+monthOptions+'</select>'+
-      '</div>'+
-      '<div>'+
-        '<label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);display:block;margin-bottom:4px">Priority</label>'+
-        '<select id="pinPriority" style="width:100%;padding:6px;font-size:11px;background:var(--s2);border:1px solid var(--border);border-radius:6px;color:var(--text)">'+
-          '<option value="low">Low</option>'+
-          '<option value="medium" selected>Medium</option>'+
-          '<option value="high">High</option>'+
-        '</select>'+
-      '</div>'+
-    '</div>'+
-    '<div style="display:flex;gap:8px">'+
-    '<button id="pinSubmitBtn" style="flex:1;padding:8px;background:var(--blue);color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer">Pin It</button>'+
+  var sub = document.createElement('div');
+  sub.style.cssText = 'font-size:11px;color:var(--muted);margin-bottom:14px';
+  sub.textContent = (cat ? cat + ' — ' : '') + name;
+  pop.appendChild(sub);
 
-        'style="flex:1;padding:8px;background:var(--blue);color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer">Pin It</button>'+
-      '<button id="pinCancelBtn" style="padding:8px 14px;background:var(--s2);color:var(--muted);border:1px solid var(--border);border-radius:6px;font-size:12px;cursor:pointer">Cancel</button>'+
-        'style="padding:8px 14px;background:var(--s2);color:var(--muted);border:1px solid var(--border);border-radius:6px;font-size:12px;cursor:pointer">Cancel</button>'+
-    '</div>';
+  // Note label + textarea
+  var noteLabel = document.createElement('label');
+  noteLabel.style.cssText = 'font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);display:block;margin-bottom:4px';
+  noteLabel.textContent = 'Note';
+  pop.appendChild(noteLabel);
 
+  var noteArea = document.createElement('textarea');
+  noteArea.id = 'pinNote';
+  noteArea.rows = 3;
+  noteArea.placeholder = 'e.g. Remove Klaviyo from June onward — update projection';
+  noteArea.style.cssText = 'width:100%;padding:8px;font-size:12px;font-family:inherit;background:var(--s2);border:1px solid var(--border);border-radius:6px;color:var(--text);resize:vertical;box-sizing:border-box;margin-bottom:12px';
+  pop.appendChild(noteArea);
+
+  // Month + Priority row
+  var row = document.createElement('div');
+  row.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px';
+
+  // Month select
+  var monthDiv = document.createElement('div');
+  var monthLabel = document.createElement('label');
+  monthLabel.style.cssText = 'font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);display:block;margin-bottom:4px';
+  monthLabel.textContent = 'From month';
+  var monthSel = document.createElement('select');
+  monthSel.id = 'pinMonth';
+  monthSel.style.cssText = 'width:100%;padding:6px;font-size:11px;background:var(--s2);border:1px solid var(--border);border-radius:6px;color:var(--text)';
+  MONTHS.forEach(function(m, i){
+    var opt = document.createElement('option');
+    opt.value = i;
+    opt.textContent = m;
+    if(i === monthIdx) opt.selected = true;
+    monthSel.appendChild(opt);
+  });
+  monthDiv.appendChild(monthLabel);
+  monthDiv.appendChild(monthSel);
+  row.appendChild(monthDiv);
+
+  // Priority select
+  var priDiv = document.createElement('div');
+  var priLabel = document.createElement('label');
+  priLabel.style.cssText = 'font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);display:block;margin-bottom:4px';
+  priLabel.textContent = 'Priority';
+  var priSel = document.createElement('select');
+  priSel.id = 'pinPriority';
+  priSel.style.cssText = 'width:100%;padding:6px;font-size:11px;background:var(--s2);border:1px solid var(--border);border-radius:6px;color:var(--text)';
+  ['low','medium','high'].forEach(function(p){
+    var opt = document.createElement('option');
+    opt.value = p;
+    opt.textContent = p.charAt(0).toUpperCase()+p.slice(1);
+    if(p === 'medium') opt.selected = true;
+    priSel.appendChild(opt);
+  });
+  priDiv.appendChild(priLabel);
+  priDiv.appendChild(priSel);
+  row.appendChild(priDiv);
+  pop.appendChild(row);
+
+  // Buttons row
+  var btnRow = document.createElement('div');
+  btnRow.style.cssText = 'display:flex;gap:8px';
+
+  var pinBtn = document.createElement('button');
+  pinBtn.style.cssText = 'flex:1;padding:8px;background:var(--blue);color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer';
+  pinBtn.textContent = 'Pin It';
+  pinBtn.onclick = function(){ submitPin(name, cat); };
+  btnRow.appendChild(pinBtn);
+
+  var cancelBtn = document.createElement('button');
+  cancelBtn.style.cssText = 'padding:8px 14px;background:var(--s2);color:var(--muted);border:1px solid var(--border);border-radius:6px;font-size:12px;cursor:pointer';
+  cancelBtn.textContent = 'Cancel';
+  cancelBtn.onclick = function(){
+    var p = document.getElementById('pinPopover');
+    if(p) p.parentNode.removeChild(p);
+  };
+  btnRow.appendChild(cancelBtn);
+  pop.appendChild(btnRow);
+
+  // Backdrop
+  var backdrop = document.createElement('div');
+  backdrop.id = 'pinBackdrop';
+  backdrop.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;z-index:9998;background:rgba(0,0,0,0.3)';
+  backdrop.onclick = function(){
+    var p = document.getElementById('pinPopover');
+    var b = document.getElementById('pinBackdrop');
+    if(p) p.parentNode.removeChild(p);
+    if(b) b.parentNode.removeChild(b);
+  };
+  document.body.appendChild(backdrop);
   document.body.appendChild(pop);
-  document.getElementById('pinSubmitBtn').onclick = function(){ submitPin(name, cat); };
-  document.getElementById('pinCancelBtn').onclick = function(){ document.getElementById('pinPopover').remove(); };
-  document.getElementById('pinNote').focus();
+  noteArea.focus();
 }
+
 
 function submitPin(name, cat){
   var note     = document.getElementById('pinNote').value.trim();
   var monthIdx = parseInt(document.getElementById('pinMonth').value);
   var priority = document.getElementById('pinPriority').value;
   if(!note){ alert('Please add a note before pinning.'); return; }
+  var bd = document.getElementById('pinBackdrop'); if(bd) bd.parentNode.removeChild(bd);
   if(!STATE.pinNotes) STATE.pinNotes = [];
   STATE.pinNotes.push({
     id: Date.now(),

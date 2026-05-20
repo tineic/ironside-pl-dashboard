@@ -225,8 +225,9 @@ input[type=file]{display:none}
 .nav-sep{height:1px;background:var(--border);margin:8px 16px}
 .nav-badge{margin-left:auto;background:var(--orange);color:#fff;font-size:9px;font-weight:700;padding:1px 6px;border-radius:10px}
 .main{padding:24px 28px;overflow-y:auto;background:var(--bg)}
-.pin-row:hover .pin-btn { opacity: 1 !important; }
-.pin-btn:hover { color: var(--blue) !important; }
+.pin-row:hover .pin-btn { display:inline !important; }
+.pin-btn { display:none; cursor:pointer; font-size:11px; color:var(--muted); }
+.pin-btn:hover { color:var(--blue); }
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 </head>
@@ -1222,7 +1223,11 @@ function renderPL(){
           return v&&v!==0;
         });
         if(!anyVal) return;
-        h+='<tr><td class="lc" style="padding-left:14px;font-weight:500">'+item.name+'</td>';
+        var _pn=(STATE.pinNotes||[]).some(function(p){return p.name===item.name&&p.status==='open';});
+        var _pn=(STATE.pinNotes||[]).some(function(p){return p.name===item.name&&p.status==="open";});
+        h+='<tr class="pin-row"><td class="lc" style="padding-left:14px;font-weight:500;position:relative">';
+        h+=(_pn?'<span style="color:#e6820e;font-size:9px;margin-right:3px">*</span>':'')+item.name;
+        h+='<span class="pin-btn" style="display:none" title="Pin to Action Items">[pin]</span></td>';
         var tot=0;
         rng.forEach(function(i){
           var v;

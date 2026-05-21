@@ -1857,7 +1857,7 @@ function renderStaffRoster(){
   h += '<div style="background:var(--s2);border:1px solid var(--border);border-radius:9px;padding:10px 14px;margin-top:10px">';
   h += '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:8px">Apply adjustment to months:</div>';
   h += '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px">';
-  var PROJ_MONTHS = ['Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  var PROJ_MONTHS = MONTHS.slice(firstProjMonth());
   PROJ_MONTHS.forEach(function(mo, idx){
     var mi = idx + 3;
     var hasOv = STATE.laborOverrides[mi] && STATE.laborOverrides[mi].other != null;
@@ -2475,12 +2475,17 @@ function renderLaborTiles(){
   h += '<div style="font-size:26px;font-weight:700;color:var(--text);letter-spacing:-.02em">'+fmt(adjCost)+'/mo</div>';
   // Total savings across all projection months
   var totalSavings = 0;
-  for(var _ms=firstProjMonth();_ms<12;_ms++) totalSavings += -getStaffingDelta(_ms);
+  var firstSavingsMo = -1;
+  for(var _ms=firstProjMonth();_ms<12;_ms++){
+    var _ds = -getStaffingDelta(_ms);
+    totalSavings += _ds;
+    if(_ds > 0 && firstSavingsMo < 0) firstSavingsMo = _ms;
+  }
+  var mthSavings = firstSavingsMo >= 0 ? -getStaffingDelta(firstSavingsMo) : 0;
   var savingsLabel;
-  if(savings>0 && totalSavings>0){
-    savingsLabel = '<span style="color:var(--green)">-'+fmt(savings)+'/mo this month · -'+fmt(totalSavings)+' total ('+MONTHS[firstProjMonth()]+'–Dec)</span>';
-  } else if(savings>0){
-    savingsLabel = '<span style="color:var(--green)">-'+fmt(savings)+'/mo from changes</span>';
+  if(totalSavings > 0){
+    var _fromLbl = firstSavingsMo >= 0 ? MONTHS[firstSavingsMo] : MONTHS[firstProjMonth()];
+    savingsLabel = '<span style="color:var(--green)">-'+fmt(mthSavings)+'/mo from '+_fromLbl+' · -'+fmt(totalSavings)+' total ('+_fromLbl+'–Dec)</span>';
   } else {
     savingsLabel = 'Base roster — no changes applied';
   }
@@ -2658,7 +2663,47 @@ function renderLaborRosterTab(){
 
 function renderStaffRosterSection(){
   var h = '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px 20px;margin-bottom:16px">';
-  h += '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:14px">Staff Roster — Headcount & Hours</div>';
+  h += '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:12px">Staff Roster — Headcount & Hours</div>';
+
+  // ── Bulk hour adjustment panel ──────────────────────────────────────────────
+  var _fpm = firstProjMonth();
+  var _monthOpts = MONTHS.map(function(m,mi){
+    if(mi < _fpm || mi > 11) return '';
+    return '<option value="'+mi+'">'+m+'</option>';
+  }).join('');
+  var _monthOptsTo = MONTHS.map(function(m,mi){
+    if(mi < _fpm || mi > 11) return '';
+    return '<option value="'+mi+'"'+(mi===11?' selected':'')+'>'+m+'</option>';
+  }).join('');
+
+  h += '<div style="background:var(--s2);border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-bottom:14px">';
+  h += '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:10px">Bulk Hour Adjustment</div>';
+  h += '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px">';
+  h += '<div style="display:flex;align-items:center;gap:6px">';
+  h += '<label style="font-size:11px;color:var(--t2)">Set all to</label>';
+  h += '<input id="bulkHrs" type="number" min="0" max="38" value="30" style="width:54px;padding:4px 6px;font-size:12px;font-weight:600;background:var(--surface);border:1px solid var(--border);border-radius:5px;color:var(--text);text-align:center">';
+  h += '<label style="font-size:11px;color:var(--t2)">hrs/wk</label>';
+  h += '</div>';
+  h += '<div style="display:flex;align-items:center;gap:6px">';
+  h += '<label style="font-size:11px;color:var(--t2)">From</label>';
+  h += '<select id="bulkFrom" style="padding:4px 6px;font-size:11px;background:var(--surface);border:1px solid var(--border);border-radius:5px;color:var(--text)">'+_monthOpts+'</select>';
+  h += '<label style="font-size:11px;color:var(--t2)">to</label>';
+  h += '<select id="bulkTo" style="padding:4px 6px;font-size:11px;background:var(--surface);border:1px solid var(--border);border-radius:5px;color:var(--text)">'+_monthOptsTo+'</select>';
+  h += '</div>';
+  h += '<button onclick="applyBulkHours()" style="padding:5px 14px;background:var(--blue);color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer">Apply to All</button>';
+  h += '</div>';
+  h += '<div style="font-size:10px;color:var(--muted);margin-bottom:6px">Exclude:</div>';
+  h += '<div style="display:flex;gap:10px;flex-wrap:wrap">';
+  STAFF.forEach(function(p){
+    if(p.active === false) return;
+    var isBrett = p.name === 'Brett';
+    h += '<label style="display:flex;align-items:center;gap:4px;font-size:11px;cursor:pointer">';
+    h += '<input type="checkbox" id="bulkExclude_'+p.id+'"'+(isBrett?' checked':'')+' style="cursor:pointer">';
+    h += p.name;
+    h += '</label>';
+  });
+  h += '</div>';
+  h += '</div>';
 
   // Table wrapper with relative positioning for the vertical divider line
   h += '<div style="position:relative">';
@@ -2782,8 +2827,8 @@ function renderHourReductionsSection(){
   h += '<div id="addHoursForm" style="display:none;background:var(--s2);border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:12px">';
   h += '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">';
   h += formSelect('hrPerson','Person',STAFF.filter(function(p){return p.active!==false;}).map(function(p){return {val:p.id,lbl:p.name+' ('+p.dept+')'};}));
-  h += formSelect('hrStart','From',['Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'].map(function(m,i){return{val:i+3,lbl:m};}));
-  h += formSelect('hrEnd','To',['Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'].map(function(m,i){return{val:i+3,lbl:m,sel:i===8};}));
+  h += formSelect('hrStart','From',MONTHS.slice(firstProjMonth()).map(function(m,i){return{val:i+firstProjMonth(),lbl:m};}));
+  h += formSelect('hrEnd','To',MONTHS.slice(firstProjMonth()).map(function(m,i){return{val:i+firstProjMonth(),lbl:m,sel:i+firstProjMonth()===11};}));
   h += '<div style="display:flex;flex-direction:column;gap:4px"><label style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)">New hrs/wk</label>';
   h += '<input type="number" id="hrHours" min="0" max="38" value="20" style="width:70px;padding:6px 8px;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;text-align:center"/></div>';
   h += '<button onclick="addHourReduction()" style="padding:7px 14px;background:var(--orange);color:#fff;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;align-self:flex-end">Add</button>';
@@ -2830,7 +2875,7 @@ function renderLayoffsSection(){
   h += '<div id="addLayoffForm" style="display:none;background:var(--s2);border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:12px">';
   h += '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">';
   h += formSelect('lyPerson','Person',STAFF.filter(function(p){return p.active!==false;}).map(function(p){return{val:p.id,lbl:p.name+' ('+p.dept+')'};}));
-  h += formSelect('lyStart','From month',['Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'].map(function(m,i){return{val:i+3,lbl:m};}));
+  h += formSelect('lyStart','From month',MONTHS.slice(firstProjMonth()).map(function(m,i){return{val:i+firstProjMonth(),lbl:m};}));
   h += '<button onclick="addLayoff()" style="padding:7px 14px;background:var(--red);color:#fff;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;align-self:flex-end">Add</button>';
   h += '<button onclick="toggleAddForm(\'addLayoffForm\')" style="padding:7px 12px;background:var(--surface);color:var(--muted);border:1px solid var(--border);border-radius:7px;font-size:12px;cursor:pointer;align-self:flex-end">Cancel</button>';
   h += '</div></div>';
@@ -2924,6 +2969,36 @@ function onRosterSlider(personId, val){
   // Update tiles
   var tilesEl = document.getElementById('laborTiles');
   if(tilesEl) tilesEl.innerHTML = renderLaborTiles();
+}
+
+function applyBulkHours(){
+  var hrs      = parseInt(document.getElementById('bulkHrs').value, 10);
+  var startMo  = parseInt(document.getElementById('bulkFrom').value, 10);
+  var endMo    = parseInt(document.getElementById('bulkTo').value, 10);
+  if(isNaN(hrs)||hrs<0||hrs>38){ alert('Enter hours between 0 and 38.'); return; }
+  if(startMo > endMo){ alert('From month must be before To month.'); return; }
+  if(!STATE.staffingChanges) STATE.staffingChanges = [];
+
+  var applied = 0;
+  STAFF.forEach(function(p){
+    if(p.active === false) return;
+    // Check if excluded
+    var chk = document.getElementById('bulkExclude_'+p.id);
+    if(chk && chk.checked) return;
+    var defHrs = parseInt(p.hrsPerWeek||p.hrs||38, 10);
+    if(hrs === defHrs) return; // no change needed
+    var delta = -(p.base * STAFF_MULTIPLIER) * ((defHrs - hrs) * 52/12);
+    STATE.staffingChanges.push({
+      type:'hours', personId:p.id, personName:p.name,
+      startMonth:startMo, endMonth:endMo, newHrs:hrs,
+      monthlyDelta:delta, status:'draft', id:Date.now()+applied
+    });
+    applied++;
+  });
+
+  if(applied === 0){ alert('No staff to update — check your exclusions.'); return; }
+  saveToServer();
+  render();
 }
 
 function applyRosterSlider(personId){

@@ -727,7 +727,8 @@ function getRange(){ return RANGE_MAP[document.getElementById('rangeSelect').val
 // ── SCENARIO TABLE ────────────────────────────────────────────────────────────
 function buildScenarioTable(){
   var h = '';
-  var projMonths = [3,4,5,6,7,8,9,10,11]; // Apr-Dec
+  var projMonths = [];
+  for(var _m=D.act_thru+1;_m<=11;_m++) projMonths.push(_m); // dynamic based on act_thru
   projMonths.forEach(function(mi){
     var pct = STATE.scenarioPct[mi-3];
     var ns  = fmt(getNS(mi), true);
@@ -740,6 +741,8 @@ function buildScenarioTable(){
       '</div>';
   });
   document.getElementById('scTable').innerHTML = h;
+  var lbl = document.getElementById('scRangeLabel');
+  if(lbl) lbl.textContent = 'Per-month revenue % override ('+MONTHS[D.act_thru+1]+'–Dec)';
 }
 
 function onScenarioInput(el){

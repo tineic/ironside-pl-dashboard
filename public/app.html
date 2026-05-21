@@ -2718,11 +2718,11 @@ function renderStaffRosterSection(){
     // Apply row — always rendered, shown/hidden
     h += '<div id="applyRow_'+p.id+'" style="display:'+(hasPreview?'flex':'none')+';align-items:center;gap:4px;flex-wrap:nowrap;padding-top:6px">';
     h += '<select id="hrFrom_'+p.id+'" style="padding:2px 4px;font-size:9px;background:var(--s2);border:1px solid var(--border);border-radius:4px;color:var(--text)">';
-    ['Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'].forEach(function(m,i){ h += '<option value="'+(i+3)+'"'+(i===0?' selected':'')+'>'+m+'</option>'; });
+    MONTHS.forEach(function(m,mi){ if(mi<firstProjMonth()||mi>11) return; h += '<option value="'+mi+'"'+(mi===firstProjMonth()?' selected':'')+'>'+m+'</option>'; });
     h += '</select>';
     h += '<span style="font-size:9px;color:var(--muted)">→</span>';
     h += '<select id="hrTo_'+p.id+'" style="padding:2px 4px;font-size:9px;background:var(--s2);border:1px solid var(--border);border-radius:4px;color:var(--text)">';
-    ['Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'].forEach(function(m,i){ h += '<option value="'+(i+3)+'"'+(i===8?' selected':'')+'>'+m+'</option>'; });
+    MONTHS.forEach(function(m,mi){ if(mi<firstProjMonth()||mi>11) return; h += '<option value="'+mi+'"'+(mi===11?' selected':'')+'>'+m+'</option>'; });
     h += '</select>';
     h += '<button data-pid="'+p.id+'" onclick="applyRosterSlider(this.dataset.pid)" style="padding:2px 7px;background:var(--blue);color:#fff;border:none;border-radius:4px;font-size:9px;font-weight:600;cursor:pointer">Apply</button>';
     h += '<button data-pid="'+p.id+'" onclick="resetRosterSlider(this.dataset.pid)" style="padding:2px 5px;background:var(--s2);color:var(--muted);border:1px solid var(--border);border-radius:4px;font-size:9px;cursor:pointer">✕</button>';

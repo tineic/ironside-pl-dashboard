@@ -1235,7 +1235,21 @@ function renderPL(){
           else v=isActual(i)?(item.act[i]!==null&&item.act[i]!==undefined?item.act[i]:item.proj[i]):item.proj[i];
           tot+=v||0;
           var cls=v===null||v===undefined?'vz':v<0?'vn':isActual(i)?'va':'vp';
-          h+='<td class="'+cls+'">'+(v!==null&&v!==undefined?fmt(v):'\u2014')+'</td>';
+          var _proj=item.proj?item.proj[i]:null;
+          if(isActual(i)&&_proj&&Math.abs(_proj)>0&&v!==null&&v!==undefined){
+            var _pct=(v-_proj)/Math.abs(_proj);
+            if(Math.abs(_pct)>0.05){
+              var _rev=item.cat==='Revenue'||item.cat==='Net Sales'||item.cat==='Gross Profit';
+              var _good=_rev?(_pct>0):(_pct<0);
+              var _bg=_good?'rgba(59,109,17,0.09)':'rgba(163,45,45,0.09)';
+              var _tc=_good?'var(--green)':'var(--red)';
+              h+='<td class="'+cls+'" style="background:'+_bg+'">'+fmt(v)+'<span style="font-size:9px;color:'+_tc+';margin-left:3px;font-weight:700">'+(_pct>0?'+':'')+Math.round(_pct*100)+'%</span></td>';
+            } else {
+              h+='<td class="'+cls+'">'+fmt(v)+'</td>';
+            }
+          } else {
+            h+='<td class="'+cls+'">'+(v!==null&&v!==undefined?fmt(v):'\u2014')+'</td>';
+          }
         });
         h+='<td>'+fmt(tot)+'</td></tr>';
       });

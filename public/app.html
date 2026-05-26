@@ -2683,6 +2683,51 @@ function renderLaborRosterTab(){
   var h = '';
   h += renderStaffRosterSection();
   h += renderLayoffsSection();
+
+  // ── Combined savings summary ─────────────────────────────────────────────
+  var changes = (STATE.staffingChanges||[]).filter(function(c){ return c.status!=='removed'; });
+  if(changes.length){
+    // Per-month savings for each projection month
+    var fpm = firstProjMonth();
+    var monthlyTotals = [];
+    for(var _m=fpm;_m<=11;_m++){
+      var mTotal = 0;
+      changes.forEach(function(c){
+        if(_m >= c.startMonth && _m <= c.endMonth) mTotal += Math.abs(c.monthlyDelta||0);
+      });
+      if(mTotal>0) monthlyTotals.push({mo:MONTHS[_m], amt:mTotal});
+    }
+    // Annual total = sum across all months
+    var annualTotal = 0;
+    for(var _m2=fpm;_m2<=11;_m2++){
+      changes.forEach(function(c){
+        if(_m2 >= c.startMonth && _m2 <= c.endMonth) annualTotal += Math.abs(c.monthlyDelta||0);
+      });
+    }
+    // Monthly varies by month - show first proj month as representative
+    var firstMonthSavings = monthlyTotals.length>0 ? monthlyTotals[0].amt : 0;
+
+    h += '<div style="background:var(--green-l);border:1px solid var(--green-b);border-radius:10px;padding:14px 20px;margin-top:12px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">';
+    h += '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--green)">Total Modeled Savings</div>';
+    h += '<div style="display:flex;gap:28px;align-items:center">';
+
+    // Per-month (first proj month)
+    h += '<div style="text-align:center">';
+    h += '<div style="font-size:10px;color:var(--muted);margin-bottom:2px">'+MONTHS[fpm]+' savings</div>';
+    h += '<div style="font-size:20px;font-weight:700;color:var(--green)">-'+fmt(firstMonthSavings)+'/mo</div>';
+    h += '</div>';
+
+    h += '<div style="width:1px;height:36px;background:var(--green-b)"></div>';
+
+    // Annual total
+    h += '<div style="text-align:center">';
+    h += '<div style="font-size:10px;color:var(--muted);margin-bottom:2px">'+MONTHS[fpm]+'–Dec total</div>';
+    h += '<div style="font-size:20px;font-weight:700;color:var(--green)">-'+fmt(annualTotal)+'</div>';
+    h += '</div>';
+
+    h += '</div></div>';
+  }
+
   return h;
 }
 

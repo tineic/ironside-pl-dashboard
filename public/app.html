@@ -852,7 +852,7 @@ function buildAlerts(){
     }
     // Building: over projection
     var tc_bld=D.true_cats['Building'],pj_bld=D.proj_cat['Building'];
-    if(tc_bld&&tc_bld[i]!==null&&pj_bld&&pj_bld[i]&&tc_bld[i]>pj_bld[i]*1.15)
+    if(tc_bld&&tc_bld[i]!==null&&pj_bld&&pj_bld[i]&&tc_bld[i]>pj_bld[i]*1.10)
       alerts.push({mo:mo,cat:'Building',sev:'info',
         txt:fmt(tc_bld[i])+' actual vs '+fmt(pj_bld[i])+' projected (+'+(((tc_bld[i]/pj_bld[i])-1)*100).toFixed(0)+'%).'});
     // Rewards unusually large
@@ -860,6 +860,30 @@ function buildAlerts(){
     if(tc_rwd&&tc_rwd[i]!==null&&tc_rwd[i]<-15000)
       alerts.push({mo:mo,cat:'Rewards',sev:'good',
         txt:'Strong rewards/credits: '+fmt(tc_rwd[i])+'. Confirm correctly applied.'});
+    // Labor: % of revenue and vs projection
+    var tc_lab=D.true_cats['Labor'],pj_lab=D.proj_cat['Labor'];
+    if(tc_lab&&tc_lab[i]!==null&&ns>0){
+      var labPct=tc_lab[i]/ns*100;
+      var labProjPct=pj_lab&&pj_lab[i]&&pns>0?pj_lab[i]/pns*100:null;
+      if(labProjPct!==null&&Math.abs(labPct-labProjPct)>10)
+        alerts.push({mo:mo,cat:'Labor',sev:labPct>labProjPct?'warn':'good',
+          txt:'Labor '+labPct.toFixed(1)+'% of revenue (projected '+labProjPct.toFixed(1)+'%). Actual: '+fmt(tc_lab[i])+' vs projected '+fmt(pj_lab[i])+'.'});
+      else if(pj_lab&&pj_lab[i]&&Math.abs(tc_lab[i]-pj_lab[i])/pj_lab[i]>0.10)
+        alerts.push({mo:mo,cat:'Labor',sev:tc_lab[i]>pj_lab[i]?'warn':'good',
+          txt:'Labor '+fmt(tc_lab[i])+' actual vs '+fmt(pj_lab[i])+' projected ('+(tc_lab[i]>pj_lab[i]?'+':'')+((tc_lab[i]-pj_lab[i])/pj_lab[i]*100).toFixed(1)+'%).'});
+    }
+    // General category variance: flag any category >15% over projection
+    var catChecks=['Company Expense','Software','Personal','Misc'];
+    catChecks.forEach(function(cat){
+      var tc=D.true_cats[cat],pj=D.proj_cat[cat];
+      if(tc&&tc[i]!==null&&pj&&pj[i]&&Math.abs(pj[i])>100){
+        var vPct=(tc[i]-pj[i])/Math.abs(pj[i]);
+        if(vPct>0.10) alerts.push({mo:mo,cat:cat,sev:'warn',
+          txt:cat+' '+fmt(tc[i])+' actual vs '+fmt(pj[i])+' projected (+'+(vPct*100).toFixed(0)+'%).'});
+        else if(vPct<-0.10) alerts.push({mo:mo,cat:cat,sev:'info',
+          txt:cat+' '+fmt(tc[i])+' actual vs '+fmt(pj[i])+' projected ('+(vPct*100).toFixed(0)+'%).'});
+      }
+    });
   }
   // Filter out dismissed alerts
   alerts = alerts.filter(function(a){ return !STATE.dismissedAlerts[alertKey(a)]; });

@@ -824,7 +824,7 @@ function resetScenario(){
 // ── ALERTS ENGINE ────────────────────────────────────────────────────────────
 function buildAlerts(){
   var alerts=[], ATH=D.act_thru;
-  for(var i=0;i<=ATH;i++){
+  for(var i=ATH;i<=ATH;i++){  // only most recent actual month
     var mo=MONTHS[i], ns=D.true_ns[i]||0, pns=D.proj_ns[i]||0;
     // PP: vs 2.6% of prior month NS
     var tc_pp=D.true_cats['Payment Processor'];
@@ -1559,7 +1559,7 @@ function removeCustomItem(id){
 
 function dismissAlert(key){
   if(!STATE.dismissedAlerts) STATE.dismissedAlerts = {};
-  STATE.dismissedAlerts[key] = true;
+  STATE.dismissedAlerts[String(key)] = true;
   saveToServer();
   render();
 }
@@ -1767,7 +1767,7 @@ function renderActionsPage(){
         h += '<button onclick="removeCustomItem('+a.id+')" title="Remove" style="padding:2px 8px;border:1px solid var(--b2);border-radius:6px;background:var(--surface);color:var(--muted);font-size:13px;cursor:pointer;flex-shrink:0;align-self:flex-start">&times;</button>';
       } else {
         var ikey = alertKey(a);
-        h += '<button onclick="dismissAlert(\"'+ikey+'\")" title="Dismiss" style="padding:2px 8px;border:1px solid var(--b2);border-radius:6px;background:var(--surface);color:var(--muted);font-size:13px;cursor:pointer;flex-shrink:0;align-self:flex-start">&times;</button>';
+        h += '<button data-akey="'+encodeURIComponent(ikey)+'" onclick="dismissAlert(decodeURIComponent(this.dataset.akey))" title="Dismiss" style="padding:2px 8px;border:1px solid var(--b2);border-radius:6px;background:var(--surface);color:var(--muted);font-size:13px;cursor:pointer;flex-shrink:0;align-self:flex-start">&times;</button>';
       }
       h += '</div>';
     });

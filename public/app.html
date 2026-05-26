@@ -1558,8 +1558,9 @@ function removeCustomItem(id){
 }
 
 function dismissAlert(key){
+  if(!STATE.dismissedAlerts) STATE.dismissedAlerts = {};
   STATE.dismissedAlerts[key] = true;
-  savePinsLocally();
+  saveToServer();
   render();
 }
 

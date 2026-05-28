@@ -471,7 +471,7 @@ var STAFF = [
   {id:'s7',  name:'Juan',     dept:'Detailing',   base:23.00,  salaried:false, builder:false, raised:true,  hrsPerWeek:38, prevBase:22.00},
   {id:'s8',  name:'Brandon',  dept:'Detailing',   base:20.70,  salaried:false, builder:false, raised:true,  hrsPerWeek:38, prevBase:20.00},
   {id:'s9',  name:'Mike',     dept:'Building',    base:24.00,  salaried:false, builder:true,  raised:false, hrsPerWeek:38},
-  {id:'s10', name:'Janelle',  dept:'Building',    base:21.00,  salaried:false, builder:true,  raised:true,  hrsPerWeek:38, prevBase:20.00},
+  {id:'s10', name:'Janelle',  dept:'Building',    base:21.00,  salaried:false, builder:true, layoffFrom:5, raised:true,  hrsPerWeek:38, prevBase:20.00},
   {id:'s11', name:'Eli',      dept:'Building',    base:19.50,  salaried:false, builder:true,  raised:false, hrsPerWeek:38},
   {id:'s12', name:'Matt',     dept:'Building',    base:18.00,  salaried:false, builder:true,  raised:false, hrsPerWeek:38},
 ];
@@ -2197,9 +2197,14 @@ var HRS_FLOOR_MO = 30 * 52 / 12;
 
 // Get laid-off names for a specific month
 function getLaidOffNames(monthIdx){
-  return (STATE.staffingChanges||[]).filter(function(c){
+  var fromChanges = (STATE.staffingChanges||[]).filter(function(c){
     return c.type==='layoff' && c.status!=='removed' && monthIdx >= c.startMonth;
   }).map(function(c){ return c.personName; });
+  // Also include staff with layoffFrom property baked into STAFF definition
+  var fromStaff = STAFF.filter(function(p){
+    return p.layoffFrom !== undefined && monthIdx >= p.layoffFrom;
+  }).map(function(p){ return p.name; });
+  return fromChanges.concat(fromStaff.filter(function(n){ return fromChanges.indexOf(n)<0; }));
 }
 
 // Get hour reductions for a specific month -> {personName: newHrs}
@@ -2219,6 +2224,7 @@ function getAdjustedRosterCost(monthIdx){
   var reductions = getHourReductions(monthIdx);
   return STAFF.reduce(function(sum, p){
     if(laidOff.indexOf(p.name) >= 0) return sum;
+    if(p.layoffFrom !== undefined && monthIdx >= p.layoffFrom) return sum;
     var currentHrs = reductions[p.name] !== undefined ? reductions[p.name] : (p.hrsPerWeek||p.hrs||38);
     // Apply live slider preview for Apr (first projection month)
     if(monthIdx === firstProjMonth() && STATE.rosterSliders && STATE.rosterSliders[p.id] !== undefined){

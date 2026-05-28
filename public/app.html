@@ -486,15 +486,33 @@ function changeMonthlyDelta(c, i){
 // ── SEASONAL / ONE-TIME OVERLAYS ─────────────────────────────────────────────
 // Pre-defined seasonal labor additions — amounts are extra cost on top of base projection
 var SEASONAL_DEFAULTS = [
-  {id:'sea1', label:'Nov Seasonal (4 workers @ $18/hr, 38hrs, 10% tax)', month:10, defaultAmt:12038.40,  editable:false},
-  {id:'sea2', label:'Dec Seasonal (4 workers @ $18/hr, 38hrs, 10% tax)', month:11, defaultAmt:15048.00,  editable:false},
-  {id:'sea3', label:'Dec Christmas Bonus',                                month:11, defaultAmt:0,         editable:true},
+  {id:'sea1', label:'Nov Seasonal Workers', month:10, isWorkers:true,  defaultWorkers:4},
+  {id:'sea2', label:'Dec Seasonal Workers', month:11, isWorkers:true,  defaultWorkers:4},
+  {id:'sea3', label:'Dec Christmas Bonus',  month:11, isWorkers:false, defaultAmt:0},
 ];
-function getSeasonalOverlay(id){ return (STATE.seasonalOverlays||[]).find(function(o){return o.id===id;})||{id:id,active:false,amount:null}; }
+var SEASONAL_HOURLY_RATE = 18.00;
+var SEASONAL_HOURS_WK    = 38;
+var SEASONAL_TAX_RATE    = 1.10; // wages + 10% employer taxes
+
+function getSeasonalOverlay(id){ return (STATE.seasonalOverlays||[]).find(function(o){return o.id===id;})||{id:id,active:false,workers:null,amount:null}; }
 function isSeasonalActive(id){ return getSeasonalOverlay(id).active; }
-function getSeasonalAmount(def){
-  var o = getSeasonalOverlay(def.id);
+function getSeasonalAmount(def, monthIdx){
+  var mi = monthIdx !== undefined ? monthIdx : def.month;
+  var o  = getSeasonalOverlay(def.id);
+  if(def.isWorkers){
+    var workers = (o.workers!=null ? o.workers : def.defaultWorkers) || 0;
+    return workers * SEASONAL_HOURS_WK * payrunsInMonth(mi) * SEASONAL_HOURLY_RATE * SEASONAL_TAX_RATE;
+  }
   return (o.amount!=null ? o.amount : def.defaultAmt) || 0;
+}
+function setSeasonalWorkers(id, val){
+  val = parseInt(val)||0;
+  var overlays = STATE.seasonalOverlays = (STATE.seasonalOverlays||[]).slice();
+  var idx = overlays.findIndex ? overlays.findIndex(function(o){return o.id===id;}) : -1;
+  if(idx===-1) overlays.push({id:id,active:true,workers:val,amount:null});
+  else overlays[idx] = Object.assign({},overlays[idx],{workers:val});
+  var el=document.getElementById('content');
+  if(el&&STATE.tab==='labor') el.innerHTML=renderLaborPage();
 }
 function toggleSeasonal(id){
   var overlays = STATE.seasonalOverlays = (STATE.seasonalOverlays||[]).slice();
@@ -696,7 +714,7 @@ function getStaffingDelta(i){
     if(def.month !== i) return sum;
     var o = getSeasonalOverlay(def.id);
     if(!o.active) return sum;
-    return sum + getSeasonalAmount(def); // positive = cost addition
+    return sum + getSeasonalAmount(def, i); // positive = cost addition
   }, 0);
   return changesTotal + seasonalTotal;
 }
@@ -2851,62 +2869,91 @@ function toggleLaborComp(){
 function renderSeasonalSection(){
   var h = '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px 20px;margin-bottom:16px">';
   h += '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:4px">Seasonal & One-Time Additions</div>';
-  h += '<div style="font-size:11px;color:var(--muted);margin-bottom:14px">Toggle on to model additional labor costs on top of the base projection. These will not affect projected net income unless activated.</div>';
+  h += '<div style="font-size:11px;color:var(--muted);margin-bottom:14px">Toggle on to model additional labor costs. These will not affect projected net income unless activated.</div>';
 
   SEASONAL_DEFAULTS.forEach(function(def){
-    var o = getSeasonalOverlay(def.id);
+    var o      = getSeasonalOverlay(def.id);
     var active = o.active;
     var amount = getSeasonalAmount(def);
-    var ns = getNS(def.month);
-    var niImpact = active ? -amount : 0;
-    var niPct = ns>0 ? Math.abs(amount)/ns*100 : 0;
+    var ns     = getNS(def.month);
+    var niPct  = ns>0 ? (amount/ns*100) : 0;
 
-    h += '<div style="border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-bottom:8px;'+
-      'background:'+(active?'var(--amber-l)':'var(--surface)')+';'+
-      'border-color:'+(active?'var(--orange-b)':'var(--border)')+'">';
-    h += '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px">';
+    h += '<div style="border:1px solid '+(active?'var(--orange-b)':'var(--border)')+';border-radius:8px;padding:12px 14px;margin-bottom:8px;background:'+(active?'var(--amber-l)':'var(--surface)')+'">';
+    h += '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px">';
+
+    // Left: label + inputs
     h += '<div style="flex:1">';
-    h += '<div style="font-size:12px;font-weight:600;margin-bottom:2px">'+def.label+'</div>';
-    h += '<div style="font-size:11px;color:var(--muted)">'+MONTHS[def.month]+' — ';
-    if(def.editable && active){
-      h += 'Bonus amount: ';
-      h += '<input type="number" id="sea_amt_'+def.id+'" value="'+amount+'" min="0" step="100" '+
-        'onchange="setSeasonalAmount(this.dataset.sid,parseFloat(this.value)||0)" data-sid='+def.id+' '+
-        'style="width:90px;padding:2px 6px;font-size:11px;background:var(--s2);border:1px solid var(--border);border-radius:4px;color:var(--text)">';
-    } else if(active){
-      h += fmt(amount)+' added to Nov/Dec labor';
+    h += '<div style="font-size:12px;font-weight:600;margin-bottom:6px">'+def.label+'</div>';
+
+    if(active){
+      if(def.isWorkers){
+        var wkrs = (o.workers!=null ? o.workers : def.defaultWorkers);
+        h += '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">';
+        h += '<label style="font-size:11px;color:var(--t2)">Workers:</label>';
+        h += '<input type="number" min="1" max="50" value="'+wkrs+'" data-sid="'+def.id+'" ';
+        h += 'onchange="setSeasonalWorkers(this.dataset.sid,this.value)" ';
+        h += 'style="width:60px;padding:3px 6px;font-size:12px;font-weight:600;background:var(--surface);border:1px solid var(--border);border-radius:5px;color:var(--text);text-align:center">';
+        h += '<span style="font-size:11px;color:var(--muted)">@ $'+SEASONAL_HOURLY_RATE+'/hr, '+SEASONAL_HOURS_WK+'hrs, '+payrunsInMonth(def.month)+' payruns</span>';
+        h += '</div>';
+        if(amount>0){
+          h += '<div style="display:flex;gap:12px;margin-top:6px;flex-wrap:wrap">';
+          h += '<span style="font-size:11px;color:var(--amber);font-weight:600">+'+fmt(amount)+' labor cost</span>';
+          h += '<span style="font-size:11px;color:var(--red)">-'+fmt(amount)+' NI impact</span>';
+          h += '<span style="font-size:11px;color:var(--muted)">('+niPct.toFixed(1)+'% of '+MONTHS[def.month]+' revenue)</span>';
+          h += '</div>';
+        }
+      } else {
+        // Bonus — dollar input
+        var bonusAmt = (o.amount!=null ? o.amount : def.defaultAmt)||0;
+        h += '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">';
+        h += '<label style="font-size:11px;color:var(--t2)">Bonus amount:</label>';
+        h += '<input type="number" min="0" step="500" value="'+bonusAmt+'" data-sid="'+def.id+'" ';
+        h += 'onchange="setSeasonalAmount(this.dataset.sid,parseFloat(this.value)||0)" ';
+        h += 'style="width:100px;padding:3px 6px;font-size:12px;font-weight:600;background:var(--surface);border:1px solid var(--border);border-radius:5px;color:var(--text)">';
+        h += '</div>';
+        if(bonusAmt>0){
+          h += '<div style="display:flex;gap:12px;margin-top:6px;flex-wrap:wrap">';
+          h += '<span style="font-size:11px;color:var(--amber);font-weight:600">+'+fmt(bonusAmt)+' bonus cost</span>';
+          h += '<span style="font-size:11px;color:var(--red)">-'+fmt(bonusAmt)+' NI impact</span>';
+          h += '</div>';
+        }
+      }
     } else {
-      h += def.editable ? 'Enter bonus amount to model impact' : fmt(def.defaultAmt)+' in additional labor cost';
+      // Inactive — show what it would add
+      if(def.isWorkers){
+        var defW = (o.workers!=null ? o.workers : def.defaultWorkers);
+        var defAmt = getSeasonalAmount(def);
+        h += '<div style="font-size:11px;color:var(--muted)">'+defW+' workers @ $'+SEASONAL_HOURLY_RATE+'/hr, '+SEASONAL_HOURS_WK+'hrs &times; '+payrunsInMonth(def.month)+' payruns = '+fmt(defAmt)+'</div>';
+      } else {
+        h += '<div style="font-size:11px;color:var(--muted)">Enter bonus amount when activated</div>';
+      }
     }
     h += '</div>';
-    if(active && amount>0){
-      h += '<div style="display:flex;gap:12px;margin-top:6px">';
-      h += '<span style="font-size:11px;color:var(--amber);font-weight:600">+'+fmt(amount)+' cost</span>';
-      h += '<span style="font-size:11px;color:var(--red)">-'+fmt(amount)+' NI impact</span>';
-      h += '<span style="font-size:11px;color:var(--muted)">('+niPct.toFixed(1)+'% of '+MONTHS[def.month]+' revenue)</span>';
-      h += '</div>';
-    }
-    h += '</div>';
+
     // Toggle button
-    h += '<button onclick="toggleSeasonal(this.dataset.sid)" data-sid='+def.id+' style="padding:6px 14px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;'+
-      'background:'+(active?'var(--orange-b)':'var(--s2)')+';'+
-      'color:'+(active?'var(--orange)':'var(--muted)')+';'+
-      'border:1px solid '+(active?'var(--orange-b)':'var(--border)')+'">'+(active?'On ✔':'Off')+
-      '</button>';
+    h += '<button onclick="toggleSeasonal(this.dataset.sid)" data-sid="'+def.id+'" ';
+    h += 'style="padding:6px 14px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;flex-shrink:0;';
+    h += 'background:'+(active?'var(--orange-b)':'var(--s2)')+';';
+    h += 'color:'+(active?'var(--orange)':'var(--muted)')+';';
+    h += 'border:1px solid '+(active?'var(--orange-b)':'var(--border)')+'">'+(active?'On \u2714':'Off')+'</button>';
+
     h += '</div></div>';
   });
 
-  // Summary if any active
+  // Summary bar if anything active
   var activeItems = SEASONAL_DEFAULTS.filter(function(d){ return getSeasonalOverlay(d.id).active; });
   if(activeItems.length){
-    var novAdd = activeItems.filter(function(d){return d.month===10;}).reduce(function(s,d){return s+getSeasonalAmount(d);},0);
-    var decAdd = activeItems.filter(function(d){return d.month===11;}).reduce(function(s,d){return s+getSeasonalAmount(d);},0);
-    var totalAdd = novAdd + decAdd;
-    h += '<div style="background:var(--amber-l);border:1px solid var(--orange-b);border-radius:7px;padding:10px 14px;margin-top:4px;display:flex;gap:20px;flex-wrap:wrap">';
-    h += '<span style="font-size:11px;font-weight:700;color:var(--orange)">Active seasonal additions:</span>';
+    var novAdd = 0, decAdd = 0;
+    activeItems.forEach(function(d){
+      var a = getSeasonalAmount(d);
+      if(d.month===10) novAdd += a;
+      if(d.month===11) decAdd += a;
+    });
+    h += '<div style="background:var(--amber-l);border:1px solid var(--orange-b);border-radius:7px;padding:10px 14px;margin-top:4px;display:flex;gap:20px;flex-wrap:wrap;align-items:center">';
+    h += '<span style="font-size:11px;font-weight:700;color:var(--orange)">Active additions:</span>';
     if(novAdd>0) h += '<span style="font-size:11px;color:var(--text)">Nov +'+fmt(novAdd)+'</span>';
     if(decAdd>0) h += '<span style="font-size:11px;color:var(--text)">Dec +'+fmt(decAdd)+'</span>';
-    h += '<span style="font-size:11px;font-weight:600;color:var(--red)">Total NI impact: -'+fmt(totalAdd)+'</span>';
+    h += '<span style="font-size:11px;font-weight:600;color:var(--red)">Total NI impact: -'+fmt(novAdd+decAdd)+'</span>';
     h += '</div>';
   }
 

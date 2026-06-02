@@ -765,7 +765,7 @@ function getPPItem(item, i){
       return s + (!it.scalable ? (it.proj[i]||0) : 0);
     }, 0);
     var scalablePool = Math.max(0, pool - fixedTotal);
-    var prop = (D.pp_scalable_props[item.name]||[])[i] || 0.25;
+    var propArr = D.pp_scalable_props && D.pp_scalable_props[item.name]; var prop = propArr ? (propArr[i] !== undefined ? propArr[i] : 0) : 0.25;
     return scalablePool * prop;
   }
   return item.proj[i]||0;

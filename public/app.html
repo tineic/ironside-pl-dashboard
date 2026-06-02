@@ -1348,15 +1348,21 @@ function renderPL(){
     });
     h+='<td style="font-weight:700">'+fmt(tot)+'</td></tr>';
 
-    // Drill-down
+    // Drill-down — inline rows (same table = perfect column alignment)
     if(isDrilled){
       var liList=D.line_items[cat]||[];
-      h+='<tr><td colspan="'+(rng.length+2)+'" style="padding:0 0 8px 0;border-bottom:2px solid var(--blue-b)">'+
-        '<div class="drill-panel"><div class="drill-hdr"><span>'+cat+' \u2014 Line Items</span>'+
-        '<button class="drill-close" data-cat="'+cat+'" onclick="event.stopPropagation();toggleDrill(this.dataset.cat)">\u00d7</button></div>'+
-        '<div style="overflow-x:auto"><table class="drill-tbl"><thead><tr><th class="lc">Item</th>';
-      rng.forEach(function(i){h+='<th class="'+(isActual(i)?'th-a':'th-p')+'">'+MONTHS[i]+'</th>';});
-      h+='<th>Total</th></tr></thead><tbody>';
+      // Sub-header row with label + close button
+      h+='<tr style="background:var(--s2)">';
+      h+='<td class="lc" style="padding:6px 8px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--blue);border-bottom:1px solid var(--blue-b)">';
+      h+=cat+' \u2014 Line Items';
+      h+='<button data-cat="'+cat+'" onclick="event.stopPropagation();toggleDrill(this.dataset.cat)" style="margin-left:8px;background:none;border:none;color:var(--muted);cursor:pointer;font-size:13px;line-height:1">\u00d7</button>';
+      h+='</td>';
+      rng.forEach(function(i){
+        h+='<td style="border-bottom:1px solid var(--blue-b);background:var(--s2)"></td>';
+      });
+      h+='<td style="border-bottom:1px solid var(--blue-b);background:var(--s2)"></td></tr>';
+
+      // Line item rows — directly in parent table so columns align perfectly
       liList.forEach(function(item){
         var anyVal=rng.some(function(i){
           var v=isPP?getPPItem(item,i):(isActual(i)?(item.act[i]!==null&&item.act[i]!==undefined?item.act[i]:item.proj[i]):item.proj[i]);
@@ -1364,36 +1370,41 @@ function renderPL(){
         });
         if(!anyVal) return;
         var _pn=(STATE.pinNotes||[]).some(function(p){return p.name===item.name&&p.status==='open';});
-        var _pn=(STATE.pinNotes||[]).some(function(p){return p.name===item.name&&p.status==="open";});
-        h+='<tr class="pin-row"><td class="lc" style="padding-left:14px;font-weight:500;position:relative">';
-        h+=(_pn?'<span style="color:#e6820e;font-size:9px;margin-right:3px">*</span>':'')+item.name;
-        h+='<button class="pin-btn" style="display:none;position:absolute;right:4px;top:50%;transform:translateY(-50%);background:var(--blue);color:#fff;border:none;border-radius:4px;font-size:9px;padding:1px 5px;cursor:pointer" title="Pin to Action Items">pin</button></td>';
-        var tot=0;
+        var _ca=item.cat||'';
+        h+='<tr class="pin-row" style="background:var(--s2)">';
+        h+='<td class="lc" style="padding:4px 8px 4px 22px;font-size:11px;border-bottom:0.5px solid var(--border)">';
+        h+=(_pn?'<span style="color:#e6820e;font-size:9px;margin-right:3px">&#11044;</span>':'')+item.name;
+        h+='<span class="pin-btn" style="display:none;cursor:pointer;font-size:11px;margin-left:6px" title="Pin to Action Items">&#128204;</span>';
+        h+='</td>';
+        var liTot=0;
         rng.forEach(function(i){
           var v;
           if(isPP) v=getPPItem(item,i);
           else v=isActual(i)?(item.act[i]!==null&&item.act[i]!==undefined?item.act[i]:item.proj[i]):item.proj[i];
-          tot+=v||0;
+          liTot+=v||0;
           var cls=v===null||v===undefined?'vz':v<0?'vn':isActual(i)?'va':'vp';
+          // Variance highlight only on most recent actual month
           var _proj=item.proj?item.proj[i]:null;
-          if(isActual(i)&&_proj&&Math.abs(_proj)>0&&v!==null&&v!==undefined){
+          if(i===D.act_thru&&_proj&&Math.abs(_proj)>0&&v!==null&&v!==undefined){
             var _pct=(v-_proj)/Math.abs(_proj);
             if(Math.abs(_pct)>0.05){
               var _rev=item.cat==='Revenue'||item.cat==='Net Sales'||item.cat==='Gross Profit';
               var _good=_rev?(_pct>0):(_pct<0);
               var _bg=_good?'rgba(59,109,17,0.09)':'rgba(163,45,45,0.09)';
               var _tc=_good?'var(--green)':'var(--red)';
-              h+='<td class="'+cls+'" style="background:'+_bg+'">'+fmt(v)+'<span style="font-size:9px;color:'+_tc+';margin-left:3px;font-weight:700">'+(_pct>0?'+':'')+Math.round(_pct*100)+'%</span></td>';
+              h+='<td class="'+cls+'" style="font-size:11px;padding:4px 3px;border-bottom:0.5px solid var(--border);background:'+_bg+'">'+fmt(v)+'<span style="font-size:9px;color:'+_tc+';margin-left:3px;font-weight:700">'+(_pct>0?'+':'')+Math.round(_pct*100)+'%</span></td>';
             } else {
-              h+='<td class="'+cls+'">'+fmt(v)+'</td>';
+              h+='<td class="'+cls+'" style="font-size:11px;padding:4px 3px;border-bottom:0.5px solid var(--border)">'+fmt(v)+'</td>';
             }
           } else {
-            h+='<td class="'+cls+'">'+(v!==null&&v!==undefined?fmt(v):'\u2014')+'</td>';
+            h+='<td class="'+cls+'" style="font-size:11px;padding:4px 3px;border-bottom:0.5px solid var(--border)">'+(v!==null&&v!==undefined?fmt(v):'\u2014')+'</td>';
           }
         });
-        h+='<td>'+fmt(tot)+'</td></tr>';
+        h+='<td style="font-size:11px;font-weight:600;padding:4px 3px;border-bottom:0.5px solid var(--border)">'+fmt(liTot)+'</td>';
+        h+='</tr>';
       });
-      h+='</tbody></table></div></div></td></tr>';
+      // End spacer row
+      h+='<tr><td colspan="'+(rng.length+2)+'" style="padding:4px;border-bottom:2px solid var(--blue-b);background:var(--s2)"></td></tr>';
     }
   });
 

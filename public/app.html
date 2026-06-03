@@ -3834,7 +3834,8 @@ function renderPlannerPage(){
       projMonths.forEach(function(mi){
         var v = isPPCat ? getPPItem(it,mi) : (it.proj ? it.proj[mi]||0 : 0);
         var _col = v<0?'var(--green)':v?'var(--t2)':'var(--border)';
-        h += '<div style="padding:7px 2px;font-size:11px;font-weight:600;text-align:center;color:'+_col+'">'+(v?(v<0?'-':'')+fmtK(Math.abs(v)):'-')+'</div>';
+        var _vStr = v ? (v<0?'-':'')+'$'+Math.round(Math.abs(v)).toLocaleString() : '-';
+        h += '<div style="padding:7px 2px;font-size:11px;font-weight:600;text-align:center;color:'+_col+'">'+_vStr+'</div>';
       });
       h += '</div>';
     });

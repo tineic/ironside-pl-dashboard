@@ -3800,7 +3800,7 @@ function renderPlannerPage(){
       var hasAdj = adjs.some(function(a){ return a.label===it.name; });
       var adjBadge = hasAdj ? '<span style="font-size:9px;background:var(--blue-l);color:var(--blue);border-radius:3px;padding:1px 5px;margin-left:6px">adjusted</span>' : '';
 
-      h += '<div onclick="openPlannerFormForItem('+JSON.stringify(it.name)+','+JSON.stringify(cat)+','+Math.round(v)+')" ';
+      h += '<div class="planner-li-row" data-pli-name='+JSON.stringify(it.name)+' data-pli-cat='+JSON.stringify(cat)+' data-pli-amt="'+Math.round(v)+'" ';
       h += 'style="display:flex;align-items:center;justify-content:space-between;padding:7px 8px;border-radius:6px;cursor:pointer;transition:background .1s" ';
       h += 'class="planner-li-row">';
       h += '<span style="font-size:12px;color:var(--text)">'+it.name+adjBadge+'</span>';
@@ -4158,8 +4158,17 @@ function uploadProjection(event){
 loadPinsLocally();
 buildScenarioTable();
 
-// Delegated click handler for pin buttons on P&L rows
+// Delegated click handler for pin buttons on P&L rows and planner line items
 document.body.addEventListener('click', function(e){
+  // Planner line item click
+  var pli = e.target.closest ? e.target.closest('.planner-li-row') : null;
+  if(pli){
+    var name = pli.dataset.pliName ? JSON.parse(pli.dataset.pliName) : '';
+    var cat  = pli.dataset.pliCat  ? JSON.parse(pli.dataset.pliCat)  : '';
+    var amt  = parseInt(pli.dataset.pliAmt)||0;
+    if(name) openPlannerFormForItem(name, cat, amt);
+    return;
+  }
   var btn = e.target.closest ? e.target.closest('.pin-btn') : null;
   if(!btn) return;
   var name = btn.dataset.name || btn.getAttribute('data-name') || '';

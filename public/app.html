@@ -264,6 +264,10 @@ input[type=file]{display:none}
     <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6" cy="4" r="2.5"/><path d="M1.5 13.5c0-2.485 2.015-4.5 4.5-4.5s4.5 2.015 4.5 4.5"/><circle cx="12" cy="5" r="2"/><path d="M14.5 12.5c0-1.657-1.343-3-3-3"/></svg>
     Labor Model
   </div>
+  <div class="nav-item" data-tab="planner" onclick="setTab(this)">
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1.5 8h4M8 1.5v13M10.5 8h4M8 5l2.5 3-2.5 3"/><circle cx="3.5" cy="8" r="1.5"/></svg>
+    Planner
+  </div>
   <div class="nav-item" data-tab="actions" onclick="setTab(this)">
     <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 4h12M2 8h8M2 12h6"/><circle cx="13" cy="12" r="2.5"/><path d="M12 11l1 1 1.5-1.5"/></svg>
     Action Items
@@ -391,6 +395,7 @@ var STATE = {
   dismissedAlerts: {}, // key: mo+'|'+cat+'|'+txt substring, dismissed auto-alerts
   pinNotes: [],         // manually pinned line items with notes
   seasonalOverlays: [],  // [{id, active, amount}] for seasonal/bonus add-ons
+  plAdjustments: [],     // [{id, label, type, amount, direction, cogsMargin, startMonth, endMonth}]
   rosterSliders: {},    // personId -> preview hrs (not yet applied)
   clickupSent: {},     // key: alertKey or pin_id -> clickup task URL
   panelOpen: {},       // tracks open collapsible panels across re-renders
@@ -402,15 +407,63 @@ function getFactor(i){ return 1 + getScenarioPct(i)/100; }
 function isActual(i){ return i <= D.act_thru; }
 
 // Net Sales
+// ── SCENARIO PLANNER ADJUSTMENTS ─────────────────────────────────────────────
+function isPLAdjActive(adj, i){
+  return adj && i >= adj.startMonth && i <= adj.endMonth && !isActual(i);
+}
+// Revenue additions
+function getPLAdjRevDelta(i){
+  return (STATE.plAdjustments||[]).reduce(function(s,adj){
+    if(adj.type!=='revenue'||!isPLAdjActive(adj,i)) return s;
+    return s + (adj.amount||0);
+  },0);
+}
+// COGS correction for revenue at different margin + direct COGS adjustments
+function getPLAdjCOGSDelta(i){
+  return (STATE.plAdjustments||[]).reduce(function(s,adj){
+    if(!isPLAdjActive(adj,i)) return s;
+    if(adj.type==='revenue'){
+      // getCOGS auto-adds amount*COGS_PCT; correct for user's actual margin
+      var margin = adj.cogsMargin!=null ? adj.cogsMargin : (1-COGS_PCT);
+      return s + (adj.amount||0)*((1-margin) - COGS_PCT);
+    }
+    if(adj.type==='cogs'){
+      return s + (adj.direction==='save' ? -(adj.amount||0) : (adj.amount||0));
+    }
+    return s;
+  },0);
+}
+// Operating cost adjustments
+function getPLAdjOCDelta(i){
+  return (STATE.plAdjustments||[]).reduce(function(s,adj){
+    if(adj.type!=='cost'||!isPLAdjActive(adj,i)) return s;
+    return s + (adj.direction==='save' ? -(adj.amount||0) : (adj.amount||0));
+  },0);
+}
+// Total NI impact for month i (positive = NI improves)
+function getPLAdjNIDelta(i){
+  if(isActual(i)) return 0;
+  return (STATE.plAdjustments||[]).reduce(function(s,adj){
+    if(!isPLAdjActive(adj,i)) return s;
+    if(adj.type==='revenue'){
+      var margin = adj.cogsMargin!=null ? adj.cogsMargin : (1-COGS_PCT);
+      return s + (adj.amount||0)*margin;
+    }
+    if(adj.type==='cost') return s + (adj.direction==='save' ? (adj.amount||0) : -(adj.amount||0));
+    if(adj.type==='cogs') return s + (adj.direction==='save' ? (adj.amount||0) : -(adj.amount||0));
+    return s;
+  },0);
+}
+
 function getNS(i){
   if(isActual(i)) return D.true_ns[i]||0;
-  return (D.proj_ns[i]||0) * getFactor(i);
+  return (D.proj_ns[i]||0) * getFactor(i) + getPLAdjRevDelta(i);
 }
 
 // COGS — always 70% of net sales (actual uses actual data)
 function getCOGS(i){
   if(isActual(i)) return D.true_cogs[i]||0;
-  return getNS(i) * COGS_PCT;
+  return getNS(i) * COGS_PCT + getPLAdjCOGSDelta(i);
 }
 
 // Gross Profit
@@ -812,7 +865,8 @@ function getOC(i){
   var mkt   = getNS(i) * MKT_TARGET_PCT;
   return labor + pp + mkt +
     FIXED.comp_exp[i] + FIXED.rewards[i] + FIXED.building[i] +
-    FIXED.software[i] + FIXED.personal[i] + FIXED.misc[i];
+    FIXED.software[i] + FIXED.personal[i] + FIXED.misc[i] +
+    getPLAdjOCDelta(i);
 }
 
 function getNI(i){
@@ -3671,6 +3725,273 @@ function toggleDrill(cat){
   STATE.drill=STATE.drill===cat?null:cat;
   render();
 }
+
+// ── SCENARIO PLANNER ─────────────────────────────────────────────────────────
+function renderPlannerPage(){
+  var fpm = firstProjMonth();
+  var adjs = STATE.plAdjustments || [];
+
+  // ── Impact summary tiles ──────────────────────────────────────────────────
+  var firstMonthNI = getPLAdjNIDelta(fpm);
+  var totalNI = 0;
+  for(var _m=fpm;_m<=11;_m++) totalNI += getPLAdjNIDelta(_m);
+  var totalRev = 0, totalCostSave = 0, totalCOGSSave = 0;
+  for(var _m2=fpm;_m2<=11;_m2++){
+    totalRev      += getPLAdjRevDelta(_m2);
+    totalCostSave += -getPLAdjOCDelta(_m2);
+    totalCOGSSave += -getPLAdjCOGSDelta(_m2);
+  }
+
+  var h = '<div style="margin-bottom:16px">';
+  h += '<div style="font-size:20px;font-weight:700;color:var(--text);margin-bottom:4px">Scenario Planner</div>';
+  h += '<div style="font-size:13px;color:var(--muted)">Model revenue additions, cost changes, and COGS adjustments. All changes flow through the full P&L.</div>';
+  h += '</div>';
+
+  // Tiles
+  if(adjs.length){
+    h += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px">';
+    // NI impact
+    var niColor = totalNI>=0?'var(--green)':'var(--red)';
+    h += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px 20px">';
+    h += '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:6px">NI Impact ('+MONTHS[fpm]+')</div>';
+    h += '<div style="font-size:22px;font-weight:700;color:'+niColor+'">'+(firstMonthNI>=0?'+':'')+fmt(firstMonthNI)+'/mo</div>';
+    h += '<div style="font-size:11px;color:var(--muted);margin-top:4px">'+MONTHS[fpm]+'–Dec total: '+(totalNI>=0?'+':'')+fmt(totalNI)+'</div>';
+    h += '</div>';
+    // Revenue
+    h += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px 20px">';
+    h += '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:6px">Added Revenue</div>';
+    h += '<div style="font-size:22px;font-weight:700;color:var(--blue)">+'+fmt(totalRev)+'</div>';
+    h += '<div style="font-size:11px;color:var(--muted);margin-top:4px">'+MONTHS[fpm]+'–Dec total</div>';
+    h += '</div>';
+    // Cost savings
+    var costNet = totalCostSave + totalCOGSSave;
+    h += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px 20px">';
+    h += '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:6px">Cost & COGS Savings</div>';
+    h += '<div style="font-size:22px;font-weight:700;color:'+(costNet>=0?'var(--green)':'var(--red)')+'">'+
+      (costNet>=0?'+':'')+fmt(costNet)+'</div>';
+    h += '<div style="font-size:11px;color:var(--muted);margin-top:4px">'+MONTHS[fpm]+'–Dec total</div>';
+    h += '</div>';
+    h += '</div>';
+  }
+
+  // ── Add button ─────────────────────────────────────────────────────────────
+  h += '<div style="display:flex;gap:10px;margin-bottom:16px">';
+  h += '<button onclick="openPlannerForm(this.dataset.pt)" data-pt="cost" style="padding:8px 16px;background:var(--surface);border:1px solid var(--border);border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px"><span style="font-size:16px;line-height:1">+</span> Cost Change</button>';
+  h += '<button onclick="openPlannerForm(this.dataset.pt)" data-pt="revenue" style="padding:8px 16px;background:var(--surface);border:1px solid var(--border);border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px"><span style="font-size:16px;line-height:1">+</span> Revenue Addition</button>';
+  h += '<button onclick="openPlannerForm(this.dataset.pt)" data-pt="cogs" style="padding:8px 16px;background:var(--surface);border:1px solid var(--border);border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px"><span style="font-size:16px;line-height:1">+</span> COGS Change</button>';
+  h += '</div>';
+
+  // ── Adjustments list ───────────────────────────────────────────────────────
+  if(!adjs.length){
+    h += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:32px;text-align:center;color:var(--muted);font-size:13px">';
+    h += 'No adjustments yet. Add a cost change, revenue addition, or COGS adjustment to model the P&L impact.';
+    h += '</div>';
+  } else {
+    h += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px 20px">';
+    h += '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:14px">Adjustments</div>';
+
+    adjs.forEach(function(adj){
+      var niD = 0;
+      for(var _m3=adj.startMonth;_m3<=adj.endMonth;_m3++) niD += getPLAdjNIDelta(_m3);
+      var niMo = getPLAdjNIDelta(Math.max(adj.startMonth, fpm));
+      var typeColor = adj.type==='revenue'?'var(--blue)':adj.type==='cogs'?'var(--purple)':'var(--text)';
+      var typeBg = adj.type==='revenue'?'var(--blue-l)':adj.type==='cogs'?'rgba(120,60,180,0.08)':'var(--s2)';
+      var typeLbl = adj.type==='revenue'?'Revenue':adj.type==='cogs'?'COGS':adj.direction==='save'?'Cost ↓':'Cost ↑';
+      var niColor2 = niD>=0?'var(--green)':'var(--red)';
+      var months = adj.endMonth - adj.startMonth + 1;
+
+      h += '<div style="display:flex;align-items:flex-start;justify-content:space-between;padding:12px 0;border-bottom:0.5px solid var(--border);gap:12px">';
+      h += '<div style="flex:1">';
+      h += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">';
+      h += '<span style="font-size:11px;font-weight:700;background:'+typeBg+';color:'+typeColor+';border-radius:4px;padding:1px 7px">'+typeLbl+'</span>';
+      h += '<span style="font-size:13px;font-weight:600;color:var(--text)">'+adj.label+'</span>';
+      h += '</div>';
+      h += '<div style="display:flex;gap:16px;flex-wrap:wrap">';
+      if(adj.type==='revenue'){
+        var margin = adj.cogsMargin!=null?adj.cogsMargin:(1-COGS_PCT);
+        h += '<span style="font-size:11px;color:var(--muted)">+'+fmt(adj.amount)+'/mo revenue</span>';
+        h += '<span style="font-size:11px;color:var(--muted)">'+(margin*100).toFixed(0)+'% gross margin</span>';
+      } else {
+        var dir = adj.direction==='save'?'-':'+';
+        h += '<span style="font-size:11px;color:var(--muted)">'+dir+fmt(adj.amount)+'/mo</span>';
+      }
+      h += '<span style="font-size:11px;color:var(--muted)">'+MONTHS[adj.startMonth]+'–'+MONTHS[adj.endMonth]+'</span>';
+      h += '<span style="font-size:11px;color:var(--muted)">('+months+' months)</span>';
+      h += '</div>';
+      h += '<div style="margin-top:5px;display:flex;gap:16px">';
+      h += '<span style="font-size:11px;font-weight:700;color:'+niColor2+'">'+(niMo>=0?'+':'')+fmt(niMo)+'/mo NI impact</span>';
+      h += '<span style="font-size:11px;color:var(--muted)">Total: '+(niD>=0?'+':'')+fmt(niD)+'</span>';
+      h += '</div>';
+      h += '</div>';
+      // Remove button
+      h += '<button onclick="removePLAdj('+adj.id+')" style="background:none;border:none;color:var(--red);font-size:18px;cursor:pointer;padding:0;line-height:1;flex-shrink:0">&times;</button>';
+      h += '</div>';
+    });
+
+    // Net impact footer
+    h += '<div style="margin-top:14px;padding:12px 14px;background:'+(totalNI>=0?'var(--green-l)':'rgba(163,45,45,0.07)')+';border:1px solid '+(totalNI>=0?'var(--green-b)':'rgba(163,45,45,0.2)')+';border-radius:7px;display:flex;justify-content:space-between;align-items:center">';
+    h += '<span style="font-size:12px;font-weight:700;color:var(--muted)">Net Impact '+MONTHS[fpm]+'–Dec</span>';
+    h += '<div style="display:flex;gap:24px">';
+    if(totalRev>0) h += '<span style="font-size:12px;color:var(--blue)">+'+fmt(totalRev)+' revenue</span>';
+    if(totalCostSave+totalCOGSSave!=0){
+      var cs = totalCostSave+totalCOGSSave;
+      h += '<span style="font-size:12px;color:'+(cs>=0?'var(--green)':'var(--red)')+'">'+fmt(cs)+' cost savings</span>';
+    }
+    h += '<span style="font-size:13px;font-weight:800;color:'+(totalNI>=0?'var(--green)':'var(--red)')+'">NI: '+(totalNI>=0?'+':'')+fmt(totalNI)+'</span>';
+    h += '</div>';
+    h += '</div>';
+
+    h += '</div>';
+  }
+  return h;
+}
+
+function openPlannerForm(type){
+  var existing = document.getElementById('plannerFormOverlay');
+  if(existing) existing.parentNode.removeChild(existing);
+
+  var fpm = firstProjMonth();
+  var typeLabels = {revenue:'Revenue Addition', cost:'Cost Change', cogs:'COGS Change'};
+  var typeDesc = {
+    revenue:'Add a new revenue stream (e.g. new product, B2B contract)',
+    cost:'Adjust an operating cost up or down (e.g. cheaper software, moving expenses)',
+    cogs:'Adjust cost of goods (e.g. better supplier pricing, materials change)'
+  };
+
+  var backdrop = document.createElement('div');
+  backdrop.id = 'plannerFormOverlay';
+  backdrop.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;z-index:9998;background:rgba(0,0,0,0.3)';
+
+  var pop = document.createElement('div');
+  pop.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px;z-index:9999;width:420px;box-shadow:0 8px 32px rgba(0,0,0,0.2)';
+
+  var title = document.createElement('div');
+  title.style.cssText = 'font-size:15px;font-weight:700;color:var(--text);margin-bottom:4px';
+  title.textContent = typeLabels[type];
+  pop.appendChild(title);
+
+  var desc = document.createElement('div');
+  desc.style.cssText = 'font-size:11px;color:var(--muted);margin-bottom:18px';
+  desc.textContent = typeDesc[type];
+  pop.appendChild(desc);
+
+  function field(labelText, inputEl){
+    var wrap = document.createElement('div');
+    wrap.style.cssText = 'margin-bottom:14px';
+    var lbl = document.createElement('label');
+    lbl.style.cssText = 'display:block;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:5px';
+    lbl.textContent = labelText;
+    wrap.appendChild(lbl);
+    wrap.appendChild(inputEl);
+    return wrap;
+  }
+  function input(type2, placeholder, val){
+    var el = document.createElement('input');
+    el.type = type2||'text';
+    el.placeholder = placeholder||'';
+    if(val!==undefined) el.value = val;
+    el.style.cssText = 'width:100%;padding:8px 10px;font-size:12px;font-family:inherit;background:var(--s2);border:1px solid var(--border);border-radius:6px;color:var(--text);box-sizing:border-box';
+    return el;
+  }
+
+  // Label
+  var labelIn = input('text', 'e.g. Klaviyo plan downgrade, Move to new building');
+  pop.appendChild(field('Description', labelIn));
+
+  // Amount
+  var amountIn = input('number', '0');
+  amountIn.min = 0;
+  amountIn.style.width = '100%';
+  pop.appendChild(field(type==='revenue'?'Monthly Revenue Amount ($)':'Monthly Amount ($)', amountIn));
+
+  // Direction (cost & cogs only)
+  var dirSel = null;
+  if(type !== 'revenue'){
+    dirSel = document.createElement('select');
+    dirSel.style.cssText = 'width:100%;padding:8px 10px;font-size:12px;background:var(--s2);border:1px solid var(--border);border-radius:6px;color:var(--text)';
+    var opts = type==='cost' ?
+      [['save','Reduce / Save (decreases cost)'],['add','Add / Increase (increases cost)']] :
+      [['save','Reduction (lower COGS)'],['add','Addition (higher COGS)']];
+    opts.forEach(function(o){ var opt=document.createElement('option'); opt.value=o[0]; opt.textContent=o[1]; dirSel.appendChild(opt); });
+    pop.appendChild(field('Direction', dirSel));
+  }
+
+  // Gross margin (revenue only)
+  var marginIn = null;
+  if(type === 'revenue'){
+    marginIn = input('number', '30');
+    marginIn.min = 0; marginIn.max = 100; marginIn.value = 30;
+    pop.appendChild(field('Gross Margin % (your expected margin on this revenue)', marginIn));
+  }
+
+  // Month range
+  var monthRow = document.createElement('div');
+  monthRow.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px';
+  function monthSel(defaultIdx){
+    var sel = document.createElement('select');
+    sel.style.cssText = 'width:100%;padding:8px 10px;font-size:12px;background:var(--s2);border:1px solid var(--border);border-radius:6px;color:var(--text)';
+    var months2 = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    months2.forEach(function(m,i){ var opt=document.createElement('option'); opt.value=i; opt.textContent=m; if(i===defaultIdx) opt.selected=true; sel.appendChild(opt); });
+    return sel;
+  }
+  var fromSel = monthSel(fpm);
+  var toSel   = monthSel(11);
+  var fromWrap = document.createElement('div');
+  var fromLbl = document.createElement('label'); fromLbl.style.cssText='display:block;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:5px'; fromLbl.textContent='From Month';
+  fromWrap.appendChild(fromLbl); fromWrap.appendChild(fromSel);
+  var toWrap = document.createElement('div');
+  var toLbl = document.createElement('label'); toLbl.style.cssText='display:block;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:5px'; toLbl.textContent='To Month';
+  toWrap.appendChild(toLbl); toWrap.appendChild(toSel);
+  monthRow.appendChild(fromWrap); monthRow.appendChild(toWrap);
+  pop.appendChild(monthRow);
+
+  // Buttons
+  var btnRow = document.createElement('div');
+  btnRow.style.cssText = 'display:flex;gap:8px;margin-top:4px';
+  var addBtn = document.createElement('button');
+  addBtn.style.cssText = 'flex:1;padding:10px;background:var(--blue);color:#fff;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer';
+  addBtn.textContent = 'Add to Scenario';
+  addBtn.onclick = function(){
+    var label2 = labelIn.value.trim();
+    var amount2 = parseFloat(amountIn.value)||0;
+    var dir2 = dirSel ? dirSel.value : 'add';
+    var margin2 = marginIn ? parseFloat(marginIn.value)/100 : null;
+    var from2 = parseInt(fromSel.value);
+    var to2   = parseInt(toSel.value);
+    if(!label2){ alert('Please enter a description.'); return; }
+    if(amount2 <= 0){ alert('Please enter an amount greater than 0.'); return; }
+    if(from2 > to2){ alert('From month must be before To month.'); return; }
+    if(!STATE.plAdjustments) STATE.plAdjustments = [];
+    STATE.plAdjustments.push({
+      id: Date.now(), label: label2, type: type,
+      amount: amount2, direction: dir2,
+      cogsMargin: margin2, startMonth: from2, endMonth: to2
+    });
+    var overlay = document.getElementById('plannerFormOverlay');
+    if(overlay) overlay.parentNode.removeChild(overlay);
+    saveToServer();
+    STATE.tab = 'planner';
+    render();
+  };
+  var cancelBtn = document.createElement('button');
+  cancelBtn.style.cssText = 'padding:10px 16px;background:var(--s2);color:var(--muted);border:1px solid var(--border);border-radius:7px;font-size:12px;cursor:pointer';
+  cancelBtn.textContent = 'Cancel';
+  cancelBtn.onclick = function(){ var o=document.getElementById('plannerFormOverlay'); if(o) o.parentNode.removeChild(o); };
+  btnRow.appendChild(addBtn); btnRow.appendChild(cancelBtn);
+  pop.appendChild(btnRow);
+
+  backdrop.onclick = function(){ var o=document.getElementById('plannerFormOverlay'); if(o) o.parentNode.removeChild(o); };
+  document.body.appendChild(backdrop);
+  document.body.appendChild(pop);
+  labelIn.focus();
+}
+
+function removePLAdj(id){
+  STATE.plAdjustments = (STATE.plAdjustments||[]).filter(function(a){ return a.id !== id; });
+  saveToServer();
+  render();
+}
+
 function render(){
   var h='';
   if(STATE.tab==='overview')        h=renderOverview();
@@ -3678,6 +3999,7 @@ function render(){
   else if(STATE.tab==='categories') h=renderCategories();
   else if(STATE.tab==='labor')      h=renderLaborPage();
   else if(STATE.tab==='actions')    h=renderActionsPage();
+  else if(STATE.tab==='planner')    h=renderPlannerPage();
   document.getElementById('content').innerHTML=h;
   if(STATE.tab==='labor'){ renderLaborChart(); }
   // After labor page renders, populate utilization results
@@ -3814,6 +4136,7 @@ document.body.addEventListener('click', function(e){
       if(s.staffingChanges) STATE.staffingChanges = s.staffingChanges;
       if(s.pinNotes) STATE.pinNotes = s.pinNotes;
       if(s.seasonalOverlays) STATE.seasonalOverlays = s.seasonalOverlays;
+      if(s.plAdjustments) STATE.plAdjustments = s.plAdjustments;
     if(s.clickupSent) STATE.clickupSent = s.clickupSent;
     }
   } catch(e) { console.log('Server load failed, using local state'); }

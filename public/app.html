@@ -3778,27 +3778,40 @@ function renderPlannerPage(){
   h += '<div style="display:grid;grid-template-columns:1fr 360px;gap:16px;align-items:start">';
 
   // ── LEFT: P&L Quick-Select ─────────────────────────────────────────────────
-  h += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px 20px">';
-  h += '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:4px">P&L Line Items — '+MONTHS[fpm]+'</div>';
-  h += '<div style="font-size:11px;color:var(--muted);margin-bottom:14px">Click any line item to pre-fill an adjustment. Values shown are base projections for '+MONTHS[fpm]+'.</div>';
+  var projMonths = [];
+  for(var _pm=fpm;_pm<=11;_pm++) projMonths.push(_pm);
+  var nCols = projMonths.length;
+  var gridCols = '160px repeat('+nCols+',1fr)';
 
-  // Categories to show
+  h += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden">';
+  h += '<div style="padding:14px 16px 10px;border-bottom:1px solid var(--border)">';
+  h += '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:2px">P&L Line Items</div>';
+  h += '<div style="font-size:11px;color:var(--muted)">Click any row to pre-fill an adjustment.</div>';
+  h += '</div>';
+
+  // Sticky month header
+  h += '<div style="display:grid;grid-template-columns:'+gridCols+';position:sticky;top:0;z-index:10;background:var(--s2);border-bottom:1px solid var(--border);padding:0 16px">';
+  h += '<div style="padding:6px 4px;font-size:10px;font-weight:700;color:var(--muted)">LINE ITEM</div>';
+  projMonths.forEach(function(mi){
+    h += '<div style="padding:6px 2px;font-size:10px;font-weight:700;color:var(--muted);text-align:center">'+MONTHS[mi].toUpperCase()+'</div>';
+  });
+  h += '</div>';
+
+  // Line items
+  h += '<div style="padding:0 16px;max-height:600px;overflow-y:auto">';
   var catList = Object.keys(D.line_items||{});
   catList.forEach(function(cat){
     var items = D.line_items[cat]||[];
-    var anyVal = items.some(function(it){ return it.proj && it.proj[fpm] && it.proj[fpm]!==0; });
-    if(!anyVal) return;
-
-    // Category header
-    h += '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);padding:8px 0 4px;border-top:0.5px solid var(--border);margin-top:4px">'+cat+'</div>';
-
-    // Determine if PP category for special item value lookup
     var isPPCat = (cat==='Payment Proc.'||cat==='Payment Processor');
-    var projMonths = [];
-    for(var _pm=fpm;_pm<=11;_pm++) projMonths.push(_pm);
+    var anyInCat = items.some(function(it){
+      return projMonths.some(function(mi){ var v=isPPCat?getPPItem(it,mi):(it.proj?it.proj[mi]:0); return v&&v!==0; });
+    });
+    if(!anyInCat) return;
+
+    // Category header row
+    h += '<div style="grid-column:1/-1;padding:8px 4px 2px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);border-top:1px solid var(--border);margin-top:4px">'+cat+'</div>';
 
     items.forEach(function(it){
-      // Check if any projection month has a value
       var anyVal = projMonths.some(function(mi){
         var v = isPPCat ? getPPItem(it,mi) : (it.proj ? it.proj[mi] : 0);
         return v && v!==0;
@@ -3806,30 +3819,27 @@ function renderPlannerPage(){
       if(!anyVal) return;
 
       var hasAdj = adjs.some(function(a){ return a.label===it.name; });
-      var adjBadge = hasAdj ? '<span style="font-size:9px;background:var(--blue-l);color:var(--blue);border-radius:3px;padding:1px 5px;margin-left:6px">adjusted</span>' : '';
       var firstV = isPPCat ? getPPItem(it,fpm) : (it.proj ? it.proj[fpm]||0 : 0);
 
-      h += '<div class="planner-li-row" data-pli-name='+JSON.stringify(it.name)+' data-pli-cat='+JSON.stringify(cat)+' data-pli-amt="'+Math.round(Math.abs(firstV))+'"';
-      h += ' style="padding:8px;border-radius:6px;cursor:pointer;margin-bottom:2px">';
+      h += '<div style="display:grid;grid-template-columns:'+gridCols+';align-items:center;border-radius:6px;cursor:pointer" ';
+      h += 'class="planner-li-row" data-pli-name='+JSON.stringify(it.name)+' data-pli-cat='+JSON.stringify(cat)+' data-pli-amt="'+Math.round(Math.abs(firstV))+'">';
 
-      // Name row
-      h += '<div style="font-size:12px;color:var(--text);margin-bottom:5px">'+it.name+adjBadge+'</div>';
-
-      // Monthly values row
-      h += '<div style="display:flex;gap:4px;flex-wrap:nowrap;overflow-x:auto">';
-      projMonths.forEach(function(mi){
-        var mv = isPPCat ? getPPItem(it,mi) : (it.proj ? it.proj[mi]||0 : 0);
-        h += '<div style="flex:1;min-width:36px;text-align:center">';
-        h += '<div style="font-size:9px;color:var(--muted);margin-bottom:1px">'+MONTHS[mi].substring(0,3)+'</div>';
-        h += '<div style="font-size:10px;font-weight:600;color:'+(mv<0?'var(--green)':'var(--muted)')+'">'+(mv?fmtK(Math.abs(mv)):'$0')+'</div>';
-        h += '</div>';
-      });
+      // Name cell
+      h += '<div style="padding:7px 4px;font-size:12px;color:var(--text);display:flex;align-items:center;gap:4px">';
+      h += it.name;
+      if(hasAdj) h += '<span style="font-size:9px;background:var(--blue-l);color:var(--blue);border-radius:3px;padding:1px 4px">adj</span>';
       h += '</div>';
+
+      // Value cells
+      projMonths.forEach(function(mi){
+        var v = isPPCat ? getPPItem(it,mi) : (it.proj ? it.proj[mi]||0 : 0);
+        h += '<div style="padding:7px 2px;font-size:11px;font-weight:600;text-align:center;color:'+(v?'var(--t2)':'var(--border)')+'">'+(v?fmtK(Math.abs(v)):'-')+'</div>';
+      });
       h += '</div>';
     });
   });
-
-  h += '</div>';
+  h += '</div>';  // scrollable area
+  h += '</div>';  // panel card
 
   // ── RIGHT: Adjustments list ────────────────────────────────────────────────
   h += '<div>';

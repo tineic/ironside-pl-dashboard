@@ -226,6 +226,7 @@ input[type=file]{display:none}
 .nav-badge{margin-left:auto;background:var(--orange);color:#fff;font-size:9px;font-weight:700;padding:1px 6px;border-radius:10px}
 .main{padding:24px 28px;overflow-y:auto;background:var(--bg)}
 .pin-row:hover .pin-btn { display:inline !important; }
+.planner-li-row:hover { background:var(--s2); }
 .pin-btn { display:none; cursor:pointer; font-size:11px; color:var(--muted); }
 .pin-btn:hover { color:var(--blue); }
 </style>
@@ -3731,7 +3732,7 @@ function renderPlannerPage(){
   var fpm = firstProjMonth();
   var adjs = STATE.plAdjustments || [];
 
-  // ── Impact summary tiles ──────────────────────────────────────────────────
+  // Impact tiles
   var firstMonthNI = getPLAdjNIDelta(fpm);
   var totalNI = 0;
   for(var _m=fpm;_m<=11;_m++) totalNI += getPLAdjNIDelta(_m);
@@ -3742,54 +3743,82 @@ function renderPlannerPage(){
     totalCOGSSave += -getPLAdjCOGSDelta(_m2);
   }
 
-  var h = '<div style="margin-bottom:16px">';
-  h += '<div style="font-size:20px;font-weight:700;color:var(--text);margin-bottom:4px">Scenario Planner</div>';
-  h += '<div style="font-size:13px;color:var(--muted)">Model revenue additions, cost changes, and COGS adjustments. All changes flow through the full P&L.</div>';
-  h += '</div>';
+  var h = '<div style="margin-bottom:16px;display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px">';
+  h += '<div><div style="font-size:20px;font-weight:700;color:var(--text);margin-bottom:4px">Scenario Planner</div>';
+  h += '<div style="font-size:13px;color:var(--muted)">Click any line item to model an adjustment. Changes flow through the full P&L.</div></div>';
+  h += '<div style="display:flex;gap:8px;flex-wrap:wrap">';
+  h += '<button onclick="openPlannerForm(this.dataset.pt)" data-pt="cost" style="padding:7px 14px;background:var(--surface);border:1px solid var(--border);border-radius:7px;font-size:12px;font-weight:600;cursor:pointer">+ Cost Change</button>';
+  h += '<button onclick="openPlannerForm(this.dataset.pt)" data-pt="revenue" style="padding:7px 14px;background:var(--surface);border:1px solid var(--border);border-radius:7px;font-size:12px;font-weight:600;cursor:pointer">+ Revenue Addition</button>';
+  h += '<button onclick="openPlannerForm(this.dataset.pt)" data-pt="cogs" style="padding:7px 14px;background:var(--surface);border:1px solid var(--border);border-radius:7px;font-size:12px;font-weight:600;cursor:pointer">+ COGS Change</button>';
+  h += '</div></div>';
 
-  // Tiles
+  // Impact tiles
   if(adjs.length){
-    h += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px">';
-    // NI impact
     var niColor = totalNI>=0?'var(--green)':'var(--red)';
-    h += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px 20px">';
-    h += '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:6px">NI Impact ('+MONTHS[fpm]+')</div>';
-    h += '<div style="font-size:22px;font-weight:700;color:'+niColor+'">'+(firstMonthNI>=0?'+':'')+fmt(firstMonthNI)+'/mo</div>';
-    h += '<div style="font-size:11px;color:var(--muted);margin-top:4px">'+MONTHS[fpm]+'–Dec total: '+(totalNI>=0?'+':'')+fmt(totalNI)+'</div>';
-    h += '</div>';
-    // Revenue
-    h += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px 20px">';
-    h += '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:6px">Added Revenue</div>';
-    h += '<div style="font-size:22px;font-weight:700;color:var(--blue)">+'+fmt(totalRev)+'</div>';
-    h += '<div style="font-size:11px;color:var(--muted);margin-top:4px">'+MONTHS[fpm]+'–Dec total</div>';
-    h += '</div>';
-    // Cost savings
     var costNet = totalCostSave + totalCOGSSave;
-    h += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px 20px">';
-    h += '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:6px">Cost & COGS Savings</div>';
-    h += '<div style="font-size:22px;font-weight:700;color:'+(costNet>=0?'var(--green)':'var(--red)')+'">'+
-      (costNet>=0?'+':'')+fmt(costNet)+'</div>';
-    h += '<div style="font-size:11px;color:var(--muted);margin-top:4px">'+MONTHS[fpm]+'–Dec total</div>';
+    h += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px">';
+    h += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 18px">';
+    h += '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:4px">NI Impact ('+MONTHS[fpm]+')</div>';
+    h += '<div style="font-size:22px;font-weight:700;color:'+niColor+'">'+(firstMonthNI>=0?'+':'')+fmt(firstMonthNI)+'/mo</div>';
+    h += '<div style="font-size:11px;color:var(--muted);margin-top:2px">'+MONTHS[fpm]+'–Dec total: '+(totalNI>=0?'+':'')+fmt(totalNI)+'</div>';
     h += '</div>';
+    h += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 18px">';
+    h += '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:4px">Added Revenue</div>';
+    h += '<div style="font-size:22px;font-weight:700;color:var(--blue)">'+(totalRev>0?'+':'')+fmt(totalRev)+'</div>';
+    h += '<div style="font-size:11px;color:var(--muted);margin-top:2px">'+MONTHS[fpm]+'–Dec total</div>';
     h += '</div>';
+    h += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 18px">';
+    h += '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:4px">Cost Savings</div>';
+    h += '<div style="font-size:22px;font-weight:700;color:'+(costNet>=0?'var(--green)':'var(--red)')+'">'+fmt(costNet)+'</div>';
+    h += '<div style="font-size:11px;color:var(--muted);margin-top:2px">'+MONTHS[fpm]+'–Dec total</div>';
+    h += '</div></div>';
   }
 
-  // ── Add button ─────────────────────────────────────────────────────────────
-  h += '<div style="display:flex;gap:10px;margin-bottom:16px">';
-  h += '<button onclick="openPlannerForm(this.dataset.pt)" data-pt="cost" style="padding:8px 16px;background:var(--surface);border:1px solid var(--border);border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px"><span style="font-size:16px;line-height:1">+</span> Cost Change</button>';
-  h += '<button onclick="openPlannerForm(this.dataset.pt)" data-pt="revenue" style="padding:8px 16px;background:var(--surface);border:1px solid var(--border);border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px"><span style="font-size:16px;line-height:1">+</span> Revenue Addition</button>';
-  h += '<button onclick="openPlannerForm(this.dataset.pt)" data-pt="cogs" style="padding:8px 16px;background:var(--surface);border:1px solid var(--border);border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px"><span style="font-size:16px;line-height:1">+</span> COGS Change</button>';
+  // Two-column layout
+  h += '<div style="display:grid;grid-template-columns:1fr 360px;gap:16px;align-items:start">';
+
+  // ── LEFT: P&L Quick-Select ─────────────────────────────────────────────────
+  h += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px 20px">';
+  h += '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:4px">P&L Line Items — '+MONTHS[fpm]+'</div>';
+  h += '<div style="font-size:11px;color:var(--muted);margin-bottom:14px">Click any line item to pre-fill an adjustment. Values shown are base projections for '+MONTHS[fpm]+'.</div>';
+
+  // Categories to show
+  var catList = Object.keys(D.line_items||{});
+  catList.forEach(function(cat){
+    var items = D.line_items[cat]||[];
+    var anyVal = items.some(function(it){ return it.proj && it.proj[fpm] && it.proj[fpm]!==0; });
+    if(!anyVal) return;
+
+    // Category header
+    h += '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);padding:8px 0 4px;border-top:0.5px solid var(--border);margin-top:4px">'+cat+'</div>';
+
+    items.forEach(function(it){
+      var v = it.proj ? it.proj[fpm] : 0;
+      if(!v || v===0) return;
+
+      // Check if this item already has an adjustment
+      var hasAdj = adjs.some(function(a){ return a.label===it.name; });
+      var adjBadge = hasAdj ? '<span style="font-size:9px;background:var(--blue-l);color:var(--blue);border-radius:3px;padding:1px 5px;margin-left:6px">adjusted</span>' : '';
+
+      h += '<div onclick="openPlannerFormForItem('+JSON.stringify(it.name)+','+JSON.stringify(cat)+','+Math.round(v)+')" ';
+      h += 'style="display:flex;align-items:center;justify-content:space-between;padding:7px 8px;border-radius:6px;cursor:pointer;transition:background .1s" ';
+      h += 'class="planner-li-row">';
+      h += '<span style="font-size:12px;color:var(--text)">'+it.name+adjBadge+'</span>';
+      h += '<span style="font-size:12px;color:var(--muted);font-weight:600">'+fmt(Math.abs(v))+'</span>';
+      h += '</div>';
+    });
+  });
+
   h += '</div>';
 
-  // ── Adjustments list ───────────────────────────────────────────────────────
-  if(!adjs.length){
-    h += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:32px;text-align:center;color:var(--muted);font-size:13px">';
-    h += 'No adjustments yet. Add a cost change, revenue addition, or COGS adjustment to model the P&L impact.';
-    h += '</div>';
-  } else {
-    h += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px 20px">';
-    h += '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:14px">Adjustments</div>';
+  // ── RIGHT: Adjustments list ────────────────────────────────────────────────
+  h += '<div>';
+  h += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px 18px;margin-bottom:12px">';
+  h += '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:12px">Scenario Adjustments ('+adjs.length+')</div>';
 
+  if(!adjs.length){
+    h += '<div style="font-size:12px;color:var(--muted);padding:8px 0">No adjustments yet. Click a line item or use the buttons above.</div>';
+  } else {
     adjs.forEach(function(adj){
       var niD = 0;
       for(var _m3=adj.startMonth;_m3<=adj.endMonth;_m3++) niD += getPLAdjNIDelta(_m3);
@@ -3798,55 +3827,43 @@ function renderPlannerPage(){
       var typeBg = adj.type==='revenue'?'var(--blue-l)':adj.type==='cogs'?'rgba(120,60,180,0.08)':'var(--s2)';
       var typeLbl = adj.type==='revenue'?'Revenue':adj.type==='cogs'?'COGS':adj.direction==='save'?'Cost ↓':'Cost ↑';
       var niColor2 = niD>=0?'var(--green)':'var(--red)';
-      var months = adj.endMonth - adj.startMonth + 1;
 
-      h += '<div style="display:flex;align-items:flex-start;justify-content:space-between;padding:12px 0;border-bottom:0.5px solid var(--border);gap:12px">';
-      h += '<div style="flex:1">';
-      h += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">';
-      h += '<span style="font-size:11px;font-weight:700;background:'+typeBg+';color:'+typeColor+';border-radius:4px;padding:1px 7px">'+typeLbl+'</span>';
-      h += '<span style="font-size:13px;font-weight:600;color:var(--text)">'+adj.label+'</span>';
+      h += '<div style="padding:10px 0;border-bottom:0.5px solid var(--border)">';
+      h += '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:6px">';
+      h += '<div style="flex:1;min-width:0">';
+      h += '<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;flex-wrap:wrap">';
+      h += '<span style="font-size:10px;font-weight:700;background:'+typeBg+';color:'+typeColor+';border-radius:3px;padding:1px 6px;flex-shrink:0">'+typeLbl+'</span>';
+      h += '<span style="font-size:12px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+adj.label+'</span>';
       h += '</div>';
-      h += '<div style="display:flex;gap:16px;flex-wrap:wrap">';
-      if(adj.type==='revenue'){
-        var margin = adj.cogsMargin!=null?adj.cogsMargin:(1-COGS_PCT);
-        h += '<span style="font-size:11px;color:var(--muted)">+'+fmt(adj.amount)+'/mo revenue</span>';
-        h += '<span style="font-size:11px;color:var(--muted)">'+(margin*100).toFixed(0)+'% gross margin</span>';
-      } else {
-        var dir = adj.direction==='save'?'-':'+';
-        h += '<span style="font-size:11px;color:var(--muted)">'+dir+fmt(adj.amount)+'/mo</span>';
-      }
-      h += '<span style="font-size:11px;color:var(--muted)">'+MONTHS[adj.startMonth]+'–'+MONTHS[adj.endMonth]+'</span>';
-      h += '<span style="font-size:11px;color:var(--muted)">('+months+' months)</span>';
+      var mo_lbl = adj.startMonth===adj.endMonth ? MONTHS[adj.startMonth] : MONTHS[adj.startMonth]+'–'+MONTHS[adj.endMonth];
+      var amt_lbl = adj.type==='revenue' ? '+'+fmt(adj.amount)+'/mo rev' : (adj.direction==='save'?'-':'+')+fmt(adj.amount)+'/mo';
+      h += '<div style="font-size:10px;color:var(--muted)">'+amt_lbl+' &nbsp;·&nbsp; '+mo_lbl+'</div>';
+      h += '<div style="font-size:11px;font-weight:700;color:'+niColor2+';margin-top:2px">'+(niMo>=0?'+':'')+fmt(niMo)+'/mo NI &nbsp;<span style="font-weight:400;color:var(--muted)">total: '+(niD>=0?'+':'')+fmt(niD)+'</span></div>';
       h += '</div>';
-      h += '<div style="margin-top:5px;display:flex;gap:16px">';
-      h += '<span style="font-size:11px;font-weight:700;color:'+niColor2+'">'+(niMo>=0?'+':'')+fmt(niMo)+'/mo NI impact</span>';
-      h += '<span style="font-size:11px;color:var(--muted)">Total: '+(niD>=0?'+':'')+fmt(niD)+'</span>';
+      // Action buttons
+      h += '<div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0">';
+      h += '<button onclick="pinPLAdjToActions('+adj.id+')" style="padding:3px 8px;background:none;border:1px solid var(--b2);border-radius:4px;font-size:9px;color:var(--muted);cursor:pointer;white-space:nowrap">📌 Pin</button>';
+      h += '<button onclick="removePLAdj('+adj.id+')" style="padding:3px 8px;background:none;border:none;color:var(--red);font-size:14px;cursor:pointer;line-height:1">&times;</button>';
       h += '</div>';
-      h += '</div>';
-      // Remove button
-      h += '<button onclick="removePLAdj('+adj.id+')" style="background:none;border:none;color:var(--red);font-size:18px;cursor:pointer;padding:0;line-height:1;flex-shrink:0">&times;</button>';
-      h += '</div>';
+      h += '</div></div>';
     });
 
-    // Net impact footer
-    h += '<div style="margin-top:14px;padding:12px 14px;background:'+(totalNI>=0?'var(--green-l)':'rgba(163,45,45,0.07)')+';border:1px solid '+(totalNI>=0?'var(--green-b)':'rgba(163,45,45,0.2)')+';border-radius:7px;display:flex;justify-content:space-between;align-items:center">';
-    h += '<span style="font-size:12px;font-weight:700;color:var(--muted)">Net Impact '+MONTHS[fpm]+'–Dec</span>';
-    h += '<div style="display:flex;gap:24px">';
-    if(totalRev>0) h += '<span style="font-size:12px;color:var(--blue)">+'+fmt(totalRev)+' revenue</span>';
-    if(totalCostSave+totalCOGSSave!=0){
-      var cs = totalCostSave+totalCOGSSave;
-      h += '<span style="font-size:12px;color:'+(cs>=0?'var(--green)':'var(--red)')+'">'+fmt(cs)+' cost savings</span>';
-    }
-    h += '<span style="font-size:13px;font-weight:800;color:'+(totalNI>=0?'var(--green)':'var(--red)')+'">NI: '+(totalNI>=0?'+':'')+fmt(totalNI)+'</span>';
-    h += '</div>';
-    h += '</div>';
-
+    // Net footer
+    h += '<div style="margin-top:12px;padding:10px;background:'+(totalNI>=0?'var(--green-l)':'rgba(163,45,45,0.07)')+';border:1px solid '+(totalNI>=0?'var(--green-b)':'rgba(163,45,45,0.2)')+';border-radius:7px">';
+    h += '<div style="font-size:10px;color:var(--muted);margin-bottom:4px">'+MONTHS[fpm]+'–Dec Net Impact</div>';
+    h += '<div style="font-size:14px;font-weight:800;color:'+(totalNI>=0?'var(--green)':'var(--red)')+'">NI: '+(totalNI>=0?'+':'')+fmt(totalNI)+'</div>';
+    if(totalRev>0) h += '<div style="font-size:11px;color:var(--blue);margin-top:2px">+'+fmt(totalRev)+' revenue</div>';
+    if(costNet!=0) h += '<div style="font-size:11px;color:'+(costNet>=0?'var(--green)':'var(--red)')+';margin-top:2px">'+fmt(costNet)+' cost savings</div>';
     h += '</div>';
   }
+  h += '</div></div>'; // close adjustments panel + right col
+
+  h += '</div>'; // close grid
   return h;
 }
 
-function openPlannerForm(type){
+
+function openPlannerForm(type, prefillLabel, prefillAmount){
   var existing = document.getElementById('plannerFormOverlay');
   if(existing) existing.parentNode.removeChild(existing);
 
@@ -3863,6 +3880,7 @@ function openPlannerForm(type){
   backdrop.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;z-index:9998;background:rgba(0,0,0,0.3)';
 
   var pop = document.createElement('div');
+  pop.id = 'plannerFormPop';
   pop.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px;z-index:9999;width:420px;box-shadow:0 8px 32px rgba(0,0,0,0.2)';
 
   var title = document.createElement('div');
@@ -3896,12 +3914,14 @@ function openPlannerForm(type){
 
   // Label
   var labelIn = input('text', 'e.g. Klaviyo plan downgrade, Move to new building');
+  if(prefillLabel) labelIn.value = prefillLabel;
   pop.appendChild(field('Description', labelIn));
 
   // Amount
   var amountIn = input('number', '0');
   amountIn.min = 0;
   amountIn.style.width = '100%';
+  if(prefillAmount) amountIn.value = Math.abs(prefillAmount);
   pop.appendChild(field(type==='revenue'?'Monthly Revenue Amount ($)':'Monthly Amount ($)', amountIn));
 
   // Direction (cost & cogs only)
@@ -3967,8 +3987,7 @@ function openPlannerForm(type){
       amount: amount2, direction: dir2,
       cogsMargin: margin2, startMonth: from2, endMonth: to2
     });
-    var overlay = document.getElementById('plannerFormOverlay');
-    if(overlay) overlay.parentNode.removeChild(overlay);
+    closePlannerForm();
     saveToServer();
     STATE.tab = 'planner';
     render();
@@ -3976,14 +3995,52 @@ function openPlannerForm(type){
   var cancelBtn = document.createElement('button');
   cancelBtn.style.cssText = 'padding:10px 16px;background:var(--s2);color:var(--muted);border:1px solid var(--border);border-radius:7px;font-size:12px;cursor:pointer';
   cancelBtn.textContent = 'Cancel';
-  cancelBtn.onclick = function(){ var o=document.getElementById('plannerFormOverlay'); if(o) o.parentNode.removeChild(o); };
+  cancelBtn.onclick = function(){ closePlannerForm(); };
   btnRow.appendChild(addBtn); btnRow.appendChild(cancelBtn);
   pop.appendChild(btnRow);
 
-  backdrop.onclick = function(){ var o=document.getElementById('plannerFormOverlay'); if(o) o.parentNode.removeChild(o); };
+  backdrop.onclick = function(){ closePlannerForm(); };
   document.body.appendChild(backdrop);
   document.body.appendChild(pop);
   labelIn.focus();
+}
+
+function openPlannerFormForItem(name, cat, amount){
+  // Determine type based on category
+  var isRevCat = cat === 'Revenue' || cat === 'Net Sales';
+  var isCOGSCat = cat === 'Cost of Goods' || cat === 'COGS';
+  var type = isRevCat ? 'revenue' : isCOGSCat ? 'cogs' : 'cost';
+  openPlannerForm(type, name, amount);
+}
+
+function pinPLAdjToActions(id){
+  var adj = (STATE.plAdjustments||[]).find(function(a){ return a.id===id; });
+  if(!adj) return;
+  if(!STATE.pinNotes) STATE.pinNotes = [];
+  var niMo = 0;
+  for(var _m=adj.startMonth;_m<=adj.endMonth;_m++) niMo += getPLAdjNIDelta(_m);
+  var typeLbl = adj.type==='revenue'?'Revenue Addition':adj.type==='cogs'?'COGS Change':adj.direction==='save'?'Cost Reduction':'Cost Addition';
+  var note = typeLbl+': '+(adj.direction==='save'||adj.type==='revenue'?'saves/adds ':'adds cost ')+fmt(adj.amount)+
+    '/mo from '+MONTHS[adj.startMonth]+' to '+MONTHS[adj.endMonth]+
+    '. Total NI impact: '+(niMo>=0?'+':'')+fmt(niMo)+'.';
+  STATE.pinNotes.push({
+    id: Date.now(), name: adj.label, cat: 'Scenario Planner',
+    note: note, monthIdx: adj.startMonth,
+    priority: 'medium', status: 'open', clickupUrl: null
+  });
+  saveToServer();
+  // Flash confirmation by briefly switching to actions tab
+  var prevTab = STATE.tab;
+  STATE.tab = 'actions';
+  render();
+  setTimeout(function(){ STATE.tab = prevTab; render(); }, 1200);
+}
+
+function closePlannerForm(){
+  ['plannerFormOverlay','plannerFormPop'].forEach(function(id){
+    var el = document.getElementById(id);
+    if(el && el.parentNode) el.parentNode.removeChild(el);
+  });
 }
 
 function removePLAdj(id){

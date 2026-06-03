@@ -4162,10 +4162,13 @@ buildScenarioTable();
 document.body.addEventListener('click', function(e){
   // Planner line item click
   var pli = e.target.closest ? e.target.closest('.planner-li-row') : null;
-  if(pli){
-    var name = pli.dataset.pliName ? JSON.parse(pli.dataset.pliName) : '';
-    var cat  = pli.dataset.pliCat  ? JSON.parse(pli.dataset.pliCat)  : '';
-    var amt  = parseInt(pli.dataset.pliAmt)||0;
+  if(!pli && e.target.parentElement && e.target.parentElement.classList && e.target.parentElement.classList.contains('planner-li-row')){
+    pli = e.target.parentElement;
+  }
+  if(pli && pli.dataset && pli.dataset.pliAmt){
+    var name = pli.getAttribute('data-pli-name') || '';
+    var cat  = pli.getAttribute('data-pli-cat')  || '';
+    var amt  = parseInt(pli.getAttribute('data-pli-amt'))||0;
     if(name) openPlannerFormForItem(name, cat, amt);
     return;
   }

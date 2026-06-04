@@ -441,6 +441,18 @@ function getPLAdjOCDelta(i){
     return s + (adj.direction==='save' ? -(adj.amount||0) : (adj.amount||0));
   },0);
 }
+// NI impact for ONE specific adjustment for month i
+function getSingleAdjNIDelta(adj, i){
+  if(!isPLAdjActive(adj, i)) return 0;
+  if(adj.type==='revenue'){
+    var margin = adj.cogsMargin!=null ? adj.cogsMargin : (1-COGS_PCT);
+    return (adj.amount||0) * margin;
+  }
+  if(adj.type==='cost') return adj.direction==='save' ? (adj.amount||0) : -(adj.amount||0);
+  if(adj.type==='cogs') return adj.direction==='save' ? (adj.amount||0) : -(adj.amount||0);
+  return 0;
+}
+
 // Total NI impact for month i (positive = NI improves)
 function getPLAdjNIDelta(i){
   if(isActual(i)) return 0;
@@ -3853,8 +3865,8 @@ function renderPlannerPage(){
   } else {
     adjs.forEach(function(adj){
       var niD = 0;
-      for(var _m3=adj.startMonth;_m3<=adj.endMonth;_m3++) niD += getPLAdjNIDelta(_m3);
-      var niMo = getPLAdjNIDelta(Math.max(adj.startMonth, fpm));
+      for(var _m3=adj.startMonth;_m3<=adj.endMonth;_m3++) niD += getSingleAdjNIDelta(adj, _m3);
+      var niMo = getSingleAdjNIDelta(adj, Math.max(adj.startMonth, fpm));
       var typeColor = adj.type==='revenue'?'var(--blue)':adj.type==='cogs'?'var(--purple)':'var(--text)';
       var typeBg = adj.type==='revenue'?'var(--blue-l)':adj.type==='cogs'?'rgba(120,60,180,0.08)':'var(--s2)';
       var typeLbl = adj.type==='revenue'?'Revenue':adj.type==='cogs'?'COGS':adj.direction==='save'?'Cost ↓':'Cost ↑';

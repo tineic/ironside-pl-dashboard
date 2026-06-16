@@ -2446,10 +2446,9 @@ function getMinRequired(dailyUnits, detPct, laidOffNames){
 
   // ── BUILDING: stepped by weekly demand ───────────────────────────────────
   var buildBench = [
-    {name:'Mike',    base:24.00, cap:MIKE_CAPACITY_WK,    hrs:HRS_FULL_MO},
-    {name:'Janelle', base:21.00, cap:BUILDER_CAPACITY_WK, hrs:HRS_FULL_MO},
-    {name:'Eli',     base:19.50, cap:BUILDER_CAPACITY_WK, hrs:HRS_FULL_MO},
-    {name:'Matt',    base:18.00, cap:BUILDER_CAPACITY_WK, hrs:HRS_FULL_MO},
+    {name:'Mike', base:24.00, cap:MIKE_CAPACITY_WK,    hrs:HRS_FULL_MO},
+    {name:'Eli',  base:19.50, cap:BUILDER_CAPACITY_WK, hrs:HRS_FULL_MO},
+    {name:'Matt', base:18.00, cap:BUILDER_CAPACITY_WK, hrs:HRS_FULL_MO},
   ];
   var remaining = weeklyUnits;
   buildBench.forEach(function(p){
@@ -2479,10 +2478,10 @@ function getMinRequired(dailyUnits, detPct, laidOffNames){
 
   // ── OTHER DEPTS: scale floor hours with volume ────────────────────────────
   var deptDefs = [
-    {name:'Detailing', floorPeople:[{name:'Juan',base:23.00,floorHrs:35}],   extra:[{name:'Brandon',base:20.70}], capPerDay:12.5, demandFn:function(w){ return w*detPct; }},
+    {name:'Detailing', floorPeople:[{name:'Juan',base:22.00,floorHrs:35}],   extra:[], capPerDay:12.5, demandFn:function(w){ return w*detPct; }},
     {name:'CS',        floorPeople:[{name:'Spencer',base:25.00,floorHrs:35},{name:'Danni',base:20.00,floorHrs:20}], extra:[], capPerDay:12, demandFn:function(w){ return w; }},
     {name:'Shipping',  floorPeople:[{name:'Sterling',base:22.00,floorHrs:35}], extra:[], capPerDay:25, demandFn:function(w){ return w; }},
-    {name:'Inventory', floorPeople:[{name:'Riley',base:25.00,floorHrs:35}],   extra:[], capPerDay:30, demandFn:function(w){ return w; }},
+    {name:'Inventory', floorPeople:[{name:'Riley',base:24.00,floorHrs:35}],   extra:[], capPerDay:30, demandFn:function(w){ return w; }},
   ];
 
   deptDefs.forEach(function(dept){
@@ -2712,12 +2711,29 @@ function renderLaborTiles(){
   h += '</div>';
 
   // Tile 2: Minimum Required Cost
+  var BRETT_CAP_WK = 9 * DAYS_PER_WEEK;
+  var buildBenchFull = [{n:'Mike',cap:MIKE_CAPACITY_WK},{n:'Eli',cap:BUILDER_CAPACITY_WK},{n:'Matt',cap:BUILDER_CAPACITY_WK}];
+  var minStaff = [];
+  var bRem = unitsWk;
+  buildBenchFull.forEach(function(p){
+    if(bRem > 0 || p.n==='Mike'){ minStaff.push(p.n); bRem -= p.cap; }
+  });
+  minStaff.push('Brett');
+  if(unitsWk > BRETT_CAP_WK) minStaff.push('Shawn (full time — >'+BRETT_CAP_WK+' units/wk)');
+  minStaff.push('Spencer','Danni','Juan','Sterling','Riley');
+
+  var fpm = firstProjMonth();
+  var fpmNS = getNS(fpm);
   h += '<div style="background:var(--surface);border:1px solid var(--blue-b);border-radius:10px;padding:18px 20px">';
   h += '<div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:8px">Minimum Required Cost</div>';
   h += '<div style="font-size:26px;font-weight:700;color:var(--blue);letter-spacing:-.02em">'+fmt(minReq)+'/mo</div>';
-  var fpm = firstProjMonth();
-  var fpmNS = getNS(fpm);
   h += '<div style="font-size:11px;color:var(--muted);margin-top:4px">~'+unitsWk+' units/wk · '+fmtK(fpmNS)+' proj NS ('+MONTHS[fpm]+')</div>';
+  h += '<div style="margin-top:8px;padding-top:8px;border-top:0.5px solid var(--border)">';
+  minStaff.forEach(function(name){
+    var isShawn = name.indexOf('Shawn') === 0;
+    h += '<div style="font-size:10px;color:'+(isShawn?'var(--blue)':'var(--muted)')+';font-weight:'+(isShawn?'700':'400')+'">'+(isShawn?'● ':'· ')+name+'</div>';
+  });
+  h += '</div>';
   h += '</div>';
 
   // Tile 3: Delta

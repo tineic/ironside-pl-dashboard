@@ -380,6 +380,8 @@ var CAT_COLORS = {
 var CAT_DISPLAY = ['Labor','Company Exp.','Rewards','Payment Proc.','Building','Marketing','Software','Personal','Misc'];
 // Labor sub-categories for drill-down
 var LABOR_SUB_CATS = ['Labor','Creative Contractors','Other Labor','Projects/One-Time'];
+var CREATIVE_CONTRACTOR_NAMES = ['Ami Lee Photography','Dog Soldier Videography',
+  'Graphic Design - Toby','Graphic Design - Lucy','Graphic Design - Josie'];
 
 // State
 var STATE = {
@@ -1431,16 +1433,46 @@ function renderPL(){
       h+='<td style="border-bottom:1px solid var(--blue-b);background:var(--s2)"></td></tr>';
 
       // Line item rows — directly in parent table so columns align perfectly
+      // Pre-compute Creative Contractors total if this is Labor
+      var _isLabor=(normCat==='Labor');
+      var _ccHeaderShown=false;
+      var _ccTotals={};
+      if(_isLabor){
+        rng.forEach(function(i){ _ccTotals[i]=0; });
+        liList.forEach(function(item){
+          if(CREATIVE_CONTRACTOR_NAMES.indexOf(item.name)>=0){
+            rng.forEach(function(i){
+              var v=isActual(i)?(item.act[i]!=null?item.act[i]:item.proj[i]):item.proj[i];
+              _ccTotals[i]+=(v||0);
+            });
+          }
+        });
+      }
       liList.forEach(function(item){
         var anyVal=rng.some(function(i){
           var v=isPP?getPPItem(item,i):(isActual(i)?(item.act[i]!==null&&item.act[i]!==undefined?item.act[i]:item.proj[i]):item.proj[i]);
           return v&&v!==0;
         });
         if(!anyVal) return;
+        // Inject CC sub-header before the first Creative Contractor
+        if(_isLabor && !_ccHeaderShown && CREATIVE_CONTRACTOR_NAMES.indexOf(item.name)>=0){
+          _ccHeaderShown=true;
+          var _ccRowTot=0;
+          h+='<tr style="background:var(--s2)">';
+          h+='<td class="lc" style="padding:5px 8px 5px 14px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);border-bottom:0.5px solid var(--border)">Creative Contractors</td>';
+          rng.forEach(function(i){
+            var v=_ccTotals[i]||0; _ccRowTot+=v;
+            h+='<td style="font-size:11px;font-weight:700;text-align:right;padding:5px 3px;border-bottom:0.5px solid var(--border);color:var(--muted)">'+(v?fmt(v):'-')+'</td>';
+          });
+          h+='<td style="font-size:11px;font-weight:700;padding:5px 3px;border-bottom:0.5px solid var(--border);color:var(--muted)">'+fmt(_ccRowTot)+'</td>';
+          h+='</tr>';
+        }
+        var _isCC=_isLabor&&CREATIVE_CONTRACTOR_NAMES.indexOf(item.name)>=0;
         var _pn=(STATE.pinNotes||[]).some(function(p){return p.name===item.name&&p.status==='open';});
         var _ca=item.cat||'';
         h+='<tr class="pin-row" style="background:var(--s2)">';
-        h+='<td class="lc" style="padding:4px 8px 4px 22px;font-size:11px;border-bottom:0.5px solid var(--border)">';
+        var _isCC=_isLabor&&CREATIVE_CONTRACTOR_NAMES.indexOf(item.name)>=0;
+        h+='<td class="lc" style="padding:4px 8px 4px \'+(_isCC?32:22)+\'px;font-size:11px;color:\'+(_isCC?\'var(--t2)\':\'inherit\')+\';border-bottom:0.5px solid var(--border)">';
         h+=(_pn?'<span style="color:#e6820e;font-size:9px;margin-right:3px">&#11044;</span>':'')+item.name;
         h+='<span class="pin-btn" style="display:none;cursor:pointer;font-size:11px;margin-left:6px" title="Pin to Action Items">&#128204;</span>';
         h+='</td>';
@@ -1910,148 +1942,88 @@ function renderActionsPage(){
   };
 
   var h = '';
-  h += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">';
+  h += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">';
   h += '<div>';
   h += '<h2 style="font-size:20px;letter-spacing:-.02em;margin-bottom:3px">Action Items</h2>';
-  h += '<p style="font-size:12px;color:var(--muted)">Jan–'+MONTHS[ATH]+' actuals &nbsp;&middot;&nbsp; '+autoAlerts.length+' auto-flagged &nbsp;&middot;&nbsp; '+STATE.customItems.length+' pinned</p>';
+  h += '<p style="font-size:12px;color:var(--muted)">Jan\u2013'+MONTHS[ATH]+' actuals &nbsp;&middot;&nbsp; '+autoAlerts.length+' auto-flagged &nbsp;&middot;&nbsp; '+STATE.customItems.length+' pinned</p>';
   h += '</div>';
   h += '<div style="display:flex;gap:8px;align-items:center">';
   h += '<button onclick="selectAllActionItems(true)" style="font-size:11px;color:var(--blue);background:none;border:none;cursor:pointer;font-weight:600">All</button>';
   h += '<span style="color:var(--m2);font-size:11px">/</span>';
   h += '<button onclick="selectAllActionItems(false)" style="font-size:11px;color:var(--muted);background:none;border:none;cursor:pointer;font-weight:600">None</button>';
-  h += '<button onclick="bulkSendToClickUp()" style="padding:7px 16px;background:#7B68EE;color:#fff;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">';
-  h += '&#8594; Send Selected to ClickUp</button>';
-  h += '<button onclick="addCustomItem()" style="padding:7px 16px;background:var(--blue);color:#fff;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">';
-  h += '&#10133; Pin Item</button>';
+  h += '<button onclick="bulkSendToClickUp()" style="padding:7px 16px;background:#7B68EE;color:#fff;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">&#8594; Send Selected to ClickUp</button>';
+  h += '<button onclick="addCustomItem()" style="padding:7px 16px;background:var(--blue);color:#fff;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">&#10133; Pin Item</button>';
   h += '</div></div>';
 
-  // Add item form (collapsible)
   h += '<div id="addItemForm" style="display:none;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:14px">';
   h += renderPinForm();
   h += '</div>';
 
-  // Combine all items
-  var allItems = autoAlerts.map(function(a){
-    var ckid = 'auto_'+alertKey(a).replace(/[|\s]/g,'_');
-    var url = STATE.clickupSent ? (STATE.clickupSent[ckid]||null) : null;
-    return Object.assign({},a,{isAuto:true, ckid:ckid, clickupUrl:url});
-  });
-  STATE.customItems.forEach(function(it){
-    var url = it.clickupUrl || (STATE.clickupSent ? STATE.clickupSent['pin_'+it.id] : null) || null;
-    allItems.push({mo:it.mo, cat:it.cat, txt:it.txt, sev:it.sev||'info', custom:true, id:it.id, isAuto:false, ckid:'pin_'+it.id, clickupUrl:url, addedBy:it.addedBy, timestamp:it.timestamp});
-  });
-
-  if(allItems.length === 0){
+  var customItems = STATE.customItems || [];
+  var hasContent = customItems.length > 0 || autoAlerts.length > 0;
+  if(!hasContent){
     h += '<div style="background:var(--green-l);border:1px solid var(--green-b);border-radius:10px;padding:20px 24px;font-size:13px;color:var(--green);font-weight:600">&#10003; No items. Everything looks on track.</div>';
     return h;
   }
 
-  // Group by category
-  var groups={}, catOrder=['Payment Processor','Net Sales','Marketing','Building','Rewards','Custom'];
-  allItems.forEach(function(a){ if(!groups[a.cat]) groups[a.cat]=[]; groups[a.cat].push(a); });
-  Object.keys(groups).forEach(function(c){ if(catOrder.indexOf(c)<0) catOrder.push(c); });
-
-  catOrder.forEach(function(cat){
-    var items=groups[cat]; if(!items||!items.length) return;
-    var color=CAT_COLORS[cat]||'var(--purple)';
+  // ── CUSTOM / PINNED ITEMS (always first) ──────────────────────────────────
+  if(customItems.length){
     h += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:14px">';
-    h += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">';
-    h += '<div style="width:10px;height:10px;border-radius:3px;background:'+color+';flex-shrink:0"></div>';
-    h += '<span style="font-size:13px;font-weight:700;color:var(--text)">'+cat+'</span>';
-    h += '<span style="font-size:11px;color:var(--muted);margin-left:2px">'+items.length+' item'+(items.length!==1?'s':'')+'</span>';
-    h += '</div><div style="display:flex;flex-direction:column;gap:6px">';
-
-    items.forEach(function(a){
-      var cfg=SEV[a.sev]||SEV.info;
-      var ckid = a.ckid;
-      var sent = a.clickupUrl ? true : false;
-      h += '<div style="display:flex;gap:10px;align-items:flex-start;padding:10px 14px;background:'+cfg.bg+';border:1px solid '+cfg.bd+';border-radius:8px">';
-      // Checkbox
-      h += '<input type="checkbox" id="ck_'+ckid+'" '+(!sent?'':' disabled checked')+' style="margin-top:3px;width:14px;height:14px;cursor:pointer;flex-shrink:0;accent-color:var(--blue)">';
-      h += '<span style="font-size:12px;flex-shrink:0;margin-top:2px;color:'+cfg.tc+'">'+cfg.icon+'</span>';
-      h += '<div style="flex:1">';
-      h += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:3px">';
-      h += '<span style="font-size:11px;font-weight:700;color:'+cfg.tc+';text-transform:uppercase;letter-spacing:.06em">'+a.mo+(a.custom?' — Pinned':'')+'</span>';
-      if(a.addedBy) h += '<span style="font-size:10px;color:var(--muted)">by '+a.addedBy+'</span>';
-      if(a.timestamp) h += '<span style="font-size:10px;color:var(--m2)">&middot; '+new Date(a.timestamp).toLocaleDateString()+'</span>';
-      if(sent) h += '<a href="'+a.clickupUrl+'" target="_blank" style="font-size:10px;color:var(--blue);text-decoration:none">&#128279; In ClickUp</a>';
+    h += '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:10px">Pinned Items</div>';
+    customItems.forEach(function(it){
+      var sev = SEV[it.sev||'info'];
+      var ckid = 'pin_'+it.id;
+      var url = it.clickupUrl || (STATE.clickupSent ? STATE.clickupSent[ckid] : null) || null;
+      h += '<div style="display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:0.5px solid var(--border)">';
+      // checkbox
+      h += '<input type="checkbox" data-ckid="'+ckid+'" class="action-cb" style="margin-top:2px;flex-shrink:0">';
+      // badge
+      h += '<span style="font-size:10px;font-weight:700;background:var(--blue-l);color:var(--blue);border-radius:4px;padding:1px 6px;flex-shrink:0">📌 '+(it.cat||'Custom')+'</span>';
+      // content
+      h += '<div style="flex:1;min-width:0">';
+      h += '<div style="font-size:12px;font-weight:600;color:var(--text)">'+it.txt+'</div>';
+      if(it.mo !== undefined) h += '<div style="font-size:10px;color:var(--muted);margin-top:2px">'+MONTHS[it.mo]+'</div>';
       h += '</div>';
-      h += '<div style="font-size:13px;color:var(--t2);line-height:1.5">'+a.txt+'</div>';
+      // actions
+      h += '<div style="display:flex;gap:6px;flex-shrink:0">';
+      if(url) h += '<a href="'+url+'" target="_blank" style="font-size:10px;color:var(--blue);text-decoration:none;padding:2px 6px;border:1px solid var(--blue-b);border-radius:4px">In ClickUp</a>';
+      h += '<button onclick="removeCustomItem('+it.id+')" style="font-size:12px;background:none;border:none;color:var(--red);cursor:pointer;padding:0 2px">&times;</button>';
       h += '</div>';
-      // Dismiss/remove
-      if(a.custom){
-        h += '<button onclick="removeCustomItem('+a.id+')" title="Remove" style="padding:2px 8px;border:1px solid var(--b2);border-radius:6px;background:var(--surface);color:var(--muted);font-size:13px;cursor:pointer;flex-shrink:0;align-self:flex-start">&times;</button>';
-      } else {
-        var ikey = alertKey(a);
-        h += '<button data-akey="'+encodeURIComponent(ikey)+'" onclick="dismissAlert(decodeURIComponent(this.dataset.akey))" title="Dismiss" style="padding:2px 8px;border:1px solid var(--b2);border-radius:6px;background:var(--surface);color:var(--muted);font-size:13px;cursor:pointer;flex-shrink:0;align-self:flex-start">&times;</button>';
-      }
       h += '</div>';
     });
-    h += '</div></div>';
-  });
+    h += '</div>';
+  }
 
-
-  // ── PROJECTION NOTES ──────────────────────────────────────────────────────
-  var pins = (STATE.pinNotes||[]);
-  var openPins = pins.filter(function(p){ return p.status !== 'resolved'; });
-  var resolvedPins = pins.filter(function(p){ return p.status === 'resolved'; });
-
-  h += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px 20px;margin-bottom:16px">';
-  h += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">';
-  h += '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--muted)">Projection Notes <span style="font-size:10px;font-weight:400;color:var(--muted)">('+openPins.length+' open)</span></div>';
-  h += '</div>';
-
-  if(!pins.length){
-    h += '<div style="color:var(--muted);font-size:12px;padding:8px 0">No projection notes yet. Hover over any line item in the P&L and click the 📌 icon to pin a note.</div>';
-  } else {
-    // Open pins
-    openPins.forEach(function(pin){
-      var priColor = pin.priority==='high' ? 'var(--red)' : pin.priority==='low' ? 'var(--muted)' : 'var(--amber)';
-      var priLabel = (pin.priority||'medium').charAt(0).toUpperCase()+(pin.priority||'medium').slice(1);
-      h += '<div style="border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-bottom:8px">';
-      h += '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">';
-      h += '<div style="flex:1">';
-      h += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">';
-      h += '<span style="font-size:12px;font-weight:600;color:var(--text)">'+pin.name+'</span>';
-      h += '<span style="font-size:10px;color:var(--muted);background:var(--s2);padding:1px 6px;border-radius:4px">'+pin.cat+'</span>';
-      h += '<span style="font-size:10px;color:'+priColor+';font-weight:600">'+priLabel+'</span>';
-      h += '<span style="font-size:10px;color:var(--muted)">from '+MONTHS[pin.monthIdx]+'</span>';
-      h += '</div>';
-      h += '<div style="font-size:12px;color:var(--t2);line-height:1.5">'+pin.note+'</div>';
+  // ── AUTO-FLAGGED ALERTS (below custom) ────────────────────────────────────
+  if(autoAlerts.length){
+    h += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:14px">';
+    h += '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:10px">Auto-Flagged &middot; '+autoAlerts.length+' items</div>';
+    autoAlerts.forEach(function(a){
+      var sev = SEV[a.sev||'warn'];
+      var ckid = 'auto_'+alertKey(a).replace(/[|\s]/g,'_');
+      var url = STATE.clickupSent ? (STATE.clickupSent[ckid]||null) : null;
+      var isDismissed = STATE.dismissedAlerts && STATE.dismissedAlerts[alertKey(a)];
+      if(isDismissed) return;
+      h += '<div style="display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:0.5px solid var(--border)">';
+      h += '<input type="checkbox" data-ckid="'+ckid+'" class="action-cb" style="margin-top:2px;flex-shrink:0">';
+      // "Category — Month" label with severity color
+      h += '<span style="font-size:10px;font-weight:700;background:'+sev.bg+';color:'+sev.tc+';border-radius:4px;padding:1px 6px;flex-shrink:0;white-space:nowrap">'+a.cat+' &mdash; '+MONTHS[a.mo]+'</span>';
+      h += '<div style="flex:1;min-width:0">';
+      h += '<div style="font-size:12px;color:var(--text)">'+a.txt+'</div>';
       h += '</div>';
       h += '<div style="display:flex;gap:6px;flex-shrink:0">';
-      if(pin.clickupUrl){
-        h += '<a href="'+pin.clickupUrl+'" target="_blank" style="padding:4px 8px;background:var(--blue);color:#fff;border-radius:5px;font-size:10px;text-decoration:none">↗ CU</a>';
-      } else {
-        h += '<button onclick="sendPinToClickUp('+pin.id+')" style="padding:4px 8px;background:none;border:1px solid var(--b2);border-radius:5px;font-size:10px;color:var(--muted);cursor:pointer">CU</button>';
-      }
-      h += '<button onclick="resolvePinNote('+pin.id+')" style="padding:4px 8px;background:none;border:1px solid var(--b2);border-radius:5px;font-size:10px;color:var(--green);cursor:pointer">✓ Done</button>';
-      h += '<button onclick="removePinNote('+pin.id+')" style="padding:4px 8px;background:none;border:none;font-size:14px;color:var(--red);cursor:pointer">&times;</button>';
-      h += '</div></div></div>';
-    });
-
-    // Resolved pins (collapsed)
-    if(resolvedPins.length){
-      h += '<div style="margin-top:8px;padding-top:8px;border-top:0.5px solid var(--border)">';
-      h += '<div style="font-size:10px;color:var(--muted);margin-bottom:6px">Resolved ('+resolvedPins.length+')</div>';
-      resolvedPins.forEach(function(pin){
-        h += '<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:0.5px solid var(--border);opacity:0.6">';
-        h += '<div style="font-size:11px;text-decoration:line-through;color:var(--muted)">'+pin.name+' — '+pin.note.substring(0,60)+(pin.note.length>60?'...':'')+'</div>';
-        h += '<button onclick="removePinNote('+pin.id+')" style="background:none;border:none;color:var(--red);font-size:13px;cursor:pointer">&times;</button>';
-        h += '</div>';
-      });
+      if(url) h += '<a href="'+url+'" target="_blank" style="font-size:10px;color:var(--blue);text-decoration:none;padding:2px 6px;border:1px solid var(--blue-b);border-radius:4px">In ClickUp</a>';
+      h += '<button onclick="dismissAlert(this.dataset.k)" data-k="'+alertKey(a)+'" style="font-size:10px;background:none;border:none;color:var(--muted);cursor:pointer;padding:2px 4px">&times;</button>';
       h += '</div>';
-    }
+      h += '</div>';
+    });
+    h += '</div>';
   }
-  h += '</div>';
 
   return h;
 }
 
 
-
-
-// ── STAFF ROSTER ─────────────────────────────────────────────────────────────
 function renderStaffRoster(){
   var h = '';
 
@@ -3854,6 +3826,7 @@ function renderPlannerPage(){
       h += 'class="planner-li-row" data-pli-name='+JSON.stringify(it.name)+' data-pli-cat='+JSON.stringify(cat)+' data-pli-amt="'+Math.round(Math.abs(firstV))+'">';
 
       // Name cell
+      var _plannerIsCC = _plannerLabor && CREATIVE_CONTRACTOR_NAMES.indexOf(it.name) >= 0;
       h += '<div style="padding:7px 4px;font-size:12px;color:var(--text);display:flex;align-items:center;gap:4px">';
       h += it.name;
       if(hasAdj) h += '<span style="font-size:9px;background:var(--blue-l);color:var(--blue);border-radius:3px;padding:1px 4px">adj</span>';

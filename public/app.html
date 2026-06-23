@@ -410,7 +410,7 @@ var STATE = {
 // ── SCENARIO ACCESSORS ────────────────────────────────────────────────────────
 function getScenarioPct(i){ return (i >= 3 && i <= 11) ? (STATE.scenarioPct[i-3]||0) : 0; }
 function getFactor(i){ return 1 + getScenarioPct(i)/100; }
-function isActual(i){ return i <= D.act_thru; }
+function isActual(i){ return STATE.viewYear !== 2027 && i <= D.act_thru; }
 
 // Net Sales
 // ── SCENARIO PLANNER ADJUSTMENTS ─────────────────────────────────────────────
@@ -871,7 +871,7 @@ function getCat(cat, i){
   // Fixed categories — unchanged regardless of scenario
   if(normCat === 'Company Expense')  return FIXED.comp_exp[i];
   if(normCat === 'Rewards')          return FIXED.rewards[i];
-  if(normCat === 'Building')         return FIXED.building[i];
+  if(normCat === 'Building')         return STATE.viewYear===2027 ? get2027Building(i) : (FIXED.building[i]||0);
   if(normCat === 'Software')         return FIXED.software[i];
   if(normCat === 'Personal')         return FIXED.personal[i];
   if(normCat === 'Misc')             return FIXED.misc[i];
@@ -881,15 +881,25 @@ function getCat(cat, i){
 }
 
 // ── OPERATING COST & NET INCOME ───────────────────────────────────────────────
+function get2027Rent(){ return 17500; }
+function get2027Building(i){
+  // Projected building costs with Rent replaced by $17,500
+  var rentItem=(D.line_items['Building']||[]).find(function(x){return x.name==='Rent';});
+  var projRent=rentItem?(rentItem.proj[i]||0):0;
+  return (FIXED.building[i]||0) - projRent + get2027Rent();
+}
 function getOC(i){
   if(isActual(i)) return D.true_oc[i]||0;
-  // Compute from individual categories — guarantees category sum = OC total
+  // 2027: component-based using 2026 projection structure
+  // PP uses model with 2025 NS (getPP/getPriorNS handle this in 2027 mode)
+  // Building uses $17,500 hardcoded rent
+  var building = STATE.viewYear===2027 ? get2027Building(i) : (FIXED.building[i]||0);
   return getTotalLabor(i)
        + getPP(i)
        + (FIXED.base_mkt[i]  || 0)
        + (FIXED.comp_exp[i]  || 0)
        + (FIXED.rewards[i]   || 0)
-       + (FIXED.building[i]  || 0)
+       + building
        + (FIXED.software[i]  || 0)
        + (FIXED.personal[i]  || 0)
        + (FIXED.misc[i]      || 0)

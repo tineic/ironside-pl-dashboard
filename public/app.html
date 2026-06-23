@@ -2438,7 +2438,7 @@ function getAdjustedRosterCost(monthIdx){
 
 // Calculate minimum required cost for a month based on volume + layoffs
 // First projection month — updates automatically when actuals are loaded
-function firstProjMonth(){ return D.act_thru + 1; }
+function firstProjMonth(){ return STATE.viewYear === 2027 ? 0 : D.act_thru + 1; }
 
 var DAYS_PER_WEEK   = 4;
 var WEEKS_PER_MONTH = 52/12;
